@@ -1,0 +1,120 @@
+/*
+ * Ported from src/ConstEnums.h:624-734.
+ *
+ * Upstream enum ParticleEffect (int32_t); represented as public static final int constants.
+ */
+package cn.enaium.fabricpvz.portable.lawn;
+
+public final class ParticleEffect {
+    public static final int PARTICLE_NONE = -1;
+    public static final int PARTICLE_MELONSPLASH = 0;
+    public static final int PARTICLE_WINTERMELON = 1;
+    public static final int PARTICLE_FUMECLOUD = 2;
+    public static final int PARTICLE_POPCORNSPLASH = 3;
+    public static final int PARTICLE_POWIE = 4;
+    public static final int PARTICLE_JACKEXPLODE = 5;
+    public static final int PARTICLE_ZOMBIE_HEAD = 6;
+    public static final int PARTICLE_ZOMBIE_ARM = 7;
+    public static final int PARTICLE_ZOMBIE_TRAFFIC_CONE = 8;
+    public static final int PARTICLE_ZOMBIE_PAIL = 9;
+    public static final int PARTICLE_ZOMBIE_HELMET = 10;
+    public static final int PARTICLE_ZOMBIE_FLAG = 11;
+    public static final int PARTICLE_ZOMBIE_DOOR = 12;
+    public static final int PARTICLE_ZOMBIE_NEWSPAPER = 13;
+    public static final int PARTICLE_ZOMBIE_HEADLIGHT = 14;
+    public static final int PARTICLE_POW = 15;
+    public static final int PARTICLE_ZOMBIE_POGO = 16;
+    public static final int PARTICLE_ZOMBIE_NEWSPAPER_HEAD = 17;
+    public static final int PARTICLE_ZOMBIE_BALLOON_HEAD = 18;
+    public static final int PARTICLE_SOD_ROLL = 19;
+    public static final int PARTICLE_GRAVE_STONE_RISE = 20;
+    public static final int PARTICLE_PLANTING = 21;
+    public static final int PARTICLE_PLANTING_POOL = 22;
+    public static final int PARTICLE_ZOMBIE_RISE = 23;
+    public static final int PARTICLE_GRAVE_BUSTER = 24;
+    public static final int PARTICLE_GRAVE_BUSTER_DIE = 25;
+    public static final int PARTICLE_POOL_SPLASH = 26;
+    public static final int PARTICLE_ICE_SPARKLE = 27;
+    public static final int PARTICLE_SEED_PACKET = 28;
+    public static final int PARTICLE_TALL_NUT_BLOCK = 29;
+    public static final int PARTICLE_DOOM = 30;
+    public static final int PARTICLE_DIGGER_RISE = 31;
+    public static final int PARTICLE_DIGGER_TUNNEL = 32;
+    public static final int PARTICLE_DANCER_RISE = 33;
+    public static final int PARTICLE_POOL_SPARKLY = 34;
+    public static final int PARTICLE_WALLNUT_EAT_SMALL = 35;
+    public static final int PARTICLE_WALLNUT_EAT_LARGE = 36;
+    public static final int PARTICLE_PEA_SPLAT = 37;
+    public static final int PARTICLE_BUTTER_SPLAT = 38;
+    public static final int PARTICLE_CABBAGE_SPLAT = 39;
+    public static final int PARTICLE_PUFF_SPLAT = 40;
+    public static final int PARTICLE_STAR_SPLAT = 41;
+    public static final int PARTICLE_ICE_TRAP = 42;
+    public static final int PARTICLE_SNOWPEA_SPLAT = 43;
+    public static final int PARTICLE_SNOWPEA_PUFF = 44;
+    public static final int PARTICLE_SNOWPEA_TRAIL = 45;
+    public static final int PARTICLE_LANTERN_SHINE = 46;
+    public static final int PARTICLE_SEED_PACKET_PICKUP = 47;
+    public static final int PARTICLE_POTATO_MINE = 48;
+    public static final int PARTICLE_POTATO_MINE_RISE = 49;
+    public static final int PARTICLE_PUFFSHROOM_TRAIL = 50;
+    public static final int PARTICLE_PUFFSHROOM_MUZZLE = 51;
+    public static final int PARTICLE_SEED_PACKET_FLASH = 52;
+    public static final int PARTICLE_WHACK_A_ZOMBIE_RISE = 53;
+    public static final int PARTICLE_ZOMBIE_LADDER = 54;
+    public static final int PARTICLE_UMBRELLA_REFLECT = 55;
+    public static final int PARTICLE_SEED_PACKET_PICK = 56;
+    public static final int PARTICLE_ICE_TRAP_ZOMBIE = 57;
+    public static final int PARTICLE_ICE_TRAP_RELEASE = 58;
+    public static final int PARTICLE_ZAMBONI_SMOKE = 59;
+    public static final int PARTICLE_GLOOMCLOUD = 60;
+    public static final int PARTICLE_ZOMBIE_POGO_HEAD = 61;
+    public static final int PARTICLE_ZAMBONI_TIRE = 62;
+    public static final int PARTICLE_ZAMBONI_EXPLOSION = 63;
+    public static final int PARTICLE_ZAMBONI_EXPLOSION2 = 64;
+    public static final int PARTICLE_CATAPULT_EXPLOSION = 65;
+    public static final int PARTICLE_MOWER_CLOUD = 66;
+    public static final int PARTICLE_BOSS_ICE_BALL = 67;
+    public static final int PARTICLE_BLASTMARK = 68;
+    public static final int PARTICLE_COIN_PICKUP_ARROW = 69;
+    public static final int PARTICLE_PRESENT_PICKUP = 70;
+    public static final int PARTICLE_IMITATER_MORPH = 71;
+    public static final int PARTICLE_MOWERED_ZOMBIE_HEAD = 72;
+    public static final int PARTICLE_MOWERED_ZOMBIE_ARM = 73;
+    public static final int PARTICLE_ZOMBIE_HEAD_POOL = 74;
+    public static final int PARTICLE_ZOMBIE_BOSS_FIREBALL = 75;
+    public static final int PARTICLE_FIREBALL_DEATH = 76;
+    public static final int PARTICLE_ICEBALL_DEATH = 77;
+    public static final int PARTICLE_ICEBALL_TRAIL = 78;
+    public static final int PARTICLE_FIREBALL_TRAIL = 79;
+    public static final int PARTICLE_BOSS_EXPLOSION = 80;
+    public static final int PARTICLE_SCREEN_FLASH = 81;
+    public static final int PARTICLE_TROPHY_SPARKLE = 82;
+    public static final int PARTICLE_PORTAL_CIRCLE = 83;
+    public static final int PARTICLE_PORTAL_SQUARE = 84;
+    public static final int PARTICLE_POTTED_PLANT_GLOW = 85;
+    public static final int PARTICLE_POTTED_WATER_PLANT_GLOW = 86;
+    public static final int PARTICLE_POTTED_ZEN_GLOW = 87;
+    public static final int PARTICLE_MIND_CONTROL = 88;
+    public static final int PARTICLE_VASE_SHATTER = 89;
+    public static final int PARTICLE_VASE_SHATTER_LEAF = 90;
+    public static final int PARTICLE_VASE_SHATTER_ZOMBIE = 91;
+    public static final int PARTICLE_AWARD_PICKUP_ARROW = 92;
+    public static final int PARTICLE_ZOMBIE_SEAWEED = 93;
+    public static final int PARTICLE_ZOMBIE_MUSTACHE = 94;
+    public static final int PARTICLE_ZOMBIE_SUNGLASS = 95;
+    public static final int PARTICLE_ZOMBIE_PINATA = 96;
+    public static final int PARTICLE_DUST_SQUASH = 97;
+    public static final int PARTICLE_DUST_FOOT = 98;
+    public static final int PARTICLE_ZOMBIE_DAISIES = 99;
+    public static final int PARTICLE_CREDIT_STROBE = 100;
+    public static final int PARTICLE_CREDITS_RAYSWIPE = 101;
+    public static final int PARTICLE_CREDITS_ZOMBIEHEADWIPE = 102;
+    public static final int PARTICLE_STARBURST = 103;
+    public static final int PARTICLE_CREDITS_FOG = 104;
+    public static final int PARTICLE_PERSENT_PICK_UP_ARROW = 105;
+    public static final int NUM_PARTICLES = 106;
+
+    private ParticleEffect() {
+    }
+}

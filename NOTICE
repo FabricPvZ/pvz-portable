@@ -1,0 +1,37 @@
+NOTICE
+======
+
+This project (FabricPvZ workspace: PvZ-Portable Java port, fabric-provider,
+fabric-api, pvz-example-mod) is a Java port / reimplementation derived from
+PvZ-Portable (https://github.com/wszqkzqk/PvZ-Portable).
+
+  PvZ-Portable - Copyright (C) 2026 Zhou Qiankang <wszqkzqk@qq.com>
+  Licensed under the GNU Lesser General Public License v3.0 or later.
+
+The Java port follows the same license (LGPL-3.0-or-later). See LICENSE and COPYING.
+
+SexyAppFramework portions
+-------------------------
+Parts of this port are derived from the SexyAppFramework as modernized by the
+PvZ-Portable community. That framework is subject to the permissive PopCap
+Games Framework License (see SexyAppFramework-LICENSE.txt):
+
+  "This product includes portions of the PopCap Games Framework,
+   (c) 2005-2009 PopCap Games, Inc.  All rights reserved.
+   (http://popcapframework.sourceforge.net/)."
+
+Game assets
+-----------
+This repository contains NO assets owned by PopCap Games or Electronic Arts.
+The game reads `main.pak` and the `properties/` folder from a legally purchased
+copy of Plants vs. Zombies (GOTY Edition) - either from the working directory or
+from a detected local Steam installation. Plants vs. Zombies is a trademark of
+PopCap Games / Electronic Arts. This project is not affiliated with, authorized
+or endorsed by PopCap Games or Electronic Arts.
+
+Third-party dependencies (Java)
+-------------------------------
+- LWJGL 3 (https://www.lwjgl.org/) - BSD-3-Clause
+- ASM (https://asm.ow2.io/) - BSD-3-Clause
+- Gson (https://github.com/google/gson) - Apache-2.0
+- JUnit (https://junit.org/) - EPL-2.0 (test scope only)
