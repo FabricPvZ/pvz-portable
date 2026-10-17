@@ -7,6 +7,7 @@
  */
 package cn.enaium.fabricpvz.portable.lawn;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -278,6 +279,30 @@ class SeedPacketTest {
         assertTrue(packet.mPacketType != SeedType.SEED_NONE);
         assertTrue(packet.mActive);
         assertEquals(0.0f, packet.mSlotMachiningPosition);
+    }
+
+    @Test
+    void packetArtPlacementMatchesThePerSeedCases() {
+        LawnEntityTestSupport.newApp();  // sets LawnApp.gLawnApp, which the placement reads
+
+        // The three peashooter-family seeds the mod renders its icons from: the repeater uses the
+        // default case and the gatling pea its own (SeedPacket.cpp:395-404).
+        assertArrayEquals(new float[] {5.0f, 9.0f, 0.5f},
+                SeedPacket.getPacketArtPlacement(SeedType.SEED_PEASHOOTER, SeedType.SEED_NONE));
+        assertArrayEquals(new float[] {5.0f, 9.0f, 0.5f},
+                SeedPacket.getPacketArtPlacement(SeedType.SEED_REPEATER, SeedType.SEED_NONE));
+        assertArrayEquals(new float[] {2.0f, 9.0f, 0.5f},
+                SeedPacket.getPacketArtPlacement(SeedType.SEED_GATLINGPEA, SeedType.SEED_NONE));
+        assertArrayEquals(new float[] {5.0f, 11.0f, 0.5f},
+                SeedPacket.getPacketArtPlacement(SeedType.SEED_THREEPEATER, SeedType.SEED_NONE));
+
+        // The vertical offset carries the upstream +1: the tallnut's 22 becomes 23.
+        assertArrayEquals(new float[] {12.0f, 23.0f, 0.3f},
+                SeedPacket.getPacketArtPlacement(SeedType.SEED_TALLNUT, SeedType.SEED_NONE));
+
+        // An imitater resolves through the imitated type.
+        assertArrayEquals(new float[] {2.0f, 9.0f, 0.5f},
+                SeedPacket.getPacketArtPlacement(SeedType.SEED_IMITATER, SeedType.SEED_GATLINGPEA));
     }
 
     @Test

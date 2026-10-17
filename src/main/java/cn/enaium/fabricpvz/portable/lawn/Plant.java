@@ -18,8 +18,8 @@ import static cn.enaium.fabricpvz.portable.pvzp.PvzpCommon.randRangeFloat;
 import static cn.enaium.fabricpvz.portable.pvzp.PvzpCommon.randRangeInt;
 import static cn.enaium.fabricpvz.portable.pvzp.PvzpCommon.testBit;
 
-import cn.enaium.fabricpvz.portable.lawn.content.CustomPlantType;
-import cn.enaium.fabricpvz.portable.lawn.content.PlantTypeRegistry;
+import java.util.Arrays;
+
 import cn.enaium.fabricpvz.portable.lawn.hooks.LawnHooksRegistry;
 import cn.enaium.fabricpvz.portable.lawn.system.PottedPlant;
 import cn.enaium.fabricpvz.portable.lawn.widget.ReportAchievement;
@@ -54,8 +54,24 @@ public class Plant extends GameObject {
     public static final int PLANT_REMOVED_EATEN = 2;
     public static final int PLANT_REMOVED_EXPLODED = 3;
 
-    /** Plant.cpp:48-106 — {@code gPlantDefs[SeedType::NUM_SEED_TYPES]}, index == SeedType. */
-    public static final PlantDefinition[] gPlantDefs = {
+    /**
+     * Plant.cpp:48-106 — the plant definition table, index == SeedType; upstream rows 0 to
+     * {@link SeedType#NUM_SEED_TYPES} {@code - 1} verbatim.
+     *
+     * <p>Same table, but as wide as the seed-type id space ({@link SeedType#MAX_SEED_TYPES}): seed
+     * type {@code n} always has its row {@code n}, the retail rows below {@code NUM_SEED_TYPES} are
+     * filled in here, and every row at or above them is empty ({@code null}) until a definition is
+     * written into it. A {@code null} row is a seed type nothing defines, which is what
+     * {@link #getPlantDefinition(int)} answers for it and what the loops walking the table skip, so
+     * the table is readable before anything has been registered and a game that registers nothing
+     * behaves exactly like the retail one.
+     *
+     * <p>Writes ({@code gPlantDefs[n] = ...}) happen before the game reads the table - the readers are
+     * the game's own classes, so they are only ever reached after the process has decided what its
+     * seed types are - and reads happen on the game thread afterwards. An entry is expected to be
+     * index-aligned ({@code def.mSeedType == n}) and is treated as immutable once written.
+     */
+    public static final PlantDefinition[] gPlantDefs = Arrays.copyOf(new PlantDefinition[] {
         new PlantDefinition(SeedType.SEED_PEASHOOTER, null, ReanimationType.REANIM_PEASHOOTER, 0, 100, 750, PlantSubClass.SUBCLASS_SHOOTER, 150, "PEASHOOTER"),
         new PlantDefinition(SeedType.SEED_SUNFLOWER, null, ReanimationType.REANIM_SUNFLOWER, 1, 50, 750, PlantSubClass.SUBCLASS_NORMAL, 2500, "SUNFLOWER"),
         new PlantDefinition(SeedType.SEED_CHERRYBOMB, null, ReanimationType.REANIM_CHERRYBOMB, 3, 150, 5000, PlantSubClass.SUBCLASS_NORMAL, 0, "CHERRY_BOMB"),
@@ -109,7 +125,7 @@ public class Plant extends GameObject {
         new PlantDefinition(SeedType.SEED_GIANT_WALLNUT, null, ReanimationType.REANIM_WALLNUT, 2, 0, 3000, PlantSubClass.SUBCLASS_NORMAL, 0, "GIANT_WALLNUT"),
         new PlantDefinition(SeedType.SEED_SPROUT, null, ReanimationType.REANIM_ZENGARDEN_SPROUT, 33, 0, 3000, PlantSubClass.SUBCLASS_NORMAL, 0, "SPROUT"),
         new PlantDefinition(SeedType.SEED_LEFTPEATER, null, ReanimationType.REANIM_REPEATER, 5, 200, 750, PlantSubClass.SUBCLASS_SHOOTER, 150, "REPEATER")
-    };
+    }, SeedType.MAX_SEED_TYPES);
 
     public int mSeedType;
     public int mPlantCol;
@@ -505,12 +521,6 @@ public class Plant extends GameObject {
             if (aFlowerPot != null) {
                 mApp.reanimationGet(aFlowerPot.mBodyReanimID).mAnimRate = 0.0f;
             }
-        }
-
-        // Mod plants override the upstream health default and may run their own setup here; the
-        // registry is empty in an unmodded game, so this is a single integer compare.
-        if (mSeedType >= SeedType.CUSTOM_SEED_FIRST) {
-            PlantTypeRegistry.applyToPlant(this);
         }
     }
 
@@ -2605,10 +2615,6 @@ public class Plant extends GameObject {
             }
 
             updateReanim();
-
-            if (mSeedType >= SeedType.CUSTOM_SEED_FIRST) {
-                PlantTypeRegistry.updatePlant(this);
-            }
         }
     }
 
@@ -4272,14 +4278,25 @@ public class Plant extends GameObject {
         LawnHooksRegistry.dispatcher().onPlantRemoved(mBoard, this, theCause);
     }
 
-    /** Plant.cpp:4966-4972. */
+    /**
+     * Plant.cpp:4966-4972 — the definition of a seed type, or {@code null} when the seed type has
+     * none.
+     *
+     * <p>A row that is still empty is a seed type nobody defined, and an id outside the seed-type id
+     * space has no row at all; both answer {@code null} rather than a row, so a caller can tell
+     * "this seed type has no definition" from "this seed type is defined" without having to know
+     * which ids are in use.
+     */
     public static PlantDefinition getPlantDefinition(int theSeedType) {
-        // Mod plants live in the registry instead of the baked-in table (see PlantTypeRegistry).
-        if (theSeedType >= SeedType.CUSTOM_SEED_FIRST) {
-            return PlantTypeRegistry.definition(theSeedType);
+        if (theSeedType < 0 || theSeedType >= gPlantDefs.length) {
+            return null;
         }
 
         PlantDefinition aDef = gPlantDefs[theSeedType];
+        if (aDef == null) {
+            return null;
+        }
+
         if (aDef.mSeedType != theSeedType) {
             throw new IllegalStateException("gPlantDefs is not index-aligned at " + theSeedType);
         }
@@ -4356,12 +4373,6 @@ public class Plant extends GameObject {
 
     /** Plant.cpp:5039-5059. */
     public static String getNameString(int theSeedType, int theImitaterType) {
-        // Mod plants carry their own name (they have no LawnStrings entry to fall back to).
-        String aCustomName = PlantTypeRegistry.displayName(theSeedType);
-        if (aCustomName != null) {
-            return aCustomName;
-        }
-
         PlantDefinition aPlantDef = getPlantDefinition(theSeedType);
         String aName = "[" + aPlantDef.mPlantName + "]";
         String aTranslatedName = PvzpStringFile.translate(aName);
@@ -4378,11 +4389,6 @@ public class Plant extends GameObject {
 
     /** Plant.cpp:5051-5055 (`GetToolTip`). */
     public static String getToolTip(int theSeedType) {
-        String aCustomToolTip = PlantTypeRegistry.tooltip(theSeedType);
-        if (aCustomToolTip != null) {
-            return aCustomToolTip;
-        }
-
         PlantDefinition aPlantDef = getPlantDefinition(theSeedType);
         String aToolTip = "[" + aPlantDef.mPlantName + "_TOOLTIP]";
         return PvzpStringFile.translate(aToolTip);
@@ -4405,11 +4411,6 @@ public class Plant extends GameObject {
 
     /** Plant.cpp:5080-5093. */
     public static boolean isNocturnal(int theSeedtype) {
-        if (theSeedtype >= SeedType.CUSTOM_SEED_FIRST) {
-            CustomPlantType aCustom = PlantTypeRegistry.get(theSeedtype);
-            return aCustom != null && aCustom.mNocturnal;
-        }
-
         return theSeedtype == SeedType.SEED_PUFFSHROOM
                 || theSeedtype == SeedType.SEED_SEASHROOM
                 || theSeedtype == SeedType.SEED_SUNSHROOM
@@ -4424,11 +4425,6 @@ public class Plant extends GameObject {
 
     /** Plant.cpp:5095-5107. */
     public static boolean isFungus(int theSeedtype) {
-        if (theSeedtype >= SeedType.CUSTOM_SEED_FIRST) {
-            CustomPlantType aCustom = PlantTypeRegistry.get(theSeedtype);
-            return aCustom != null && aCustom.mFungus;
-        }
-
         return theSeedtype == SeedType.SEED_PUFFSHROOM
                 || theSeedtype == SeedType.SEED_SUNSHROOM
                 || theSeedtype == SeedType.SEED_FUMESHROOM
@@ -4443,11 +4439,6 @@ public class Plant extends GameObject {
 
     /** Plant.cpp:5109-5115. */
     public static boolean isAquatic(int theSeedType) {
-        if (theSeedType >= SeedType.CUSTOM_SEED_FIRST) {
-            CustomPlantType aCustom = PlantTypeRegistry.get(theSeedType);
-            return aCustom != null && aCustom.mAquatic;
-        }
-
         return theSeedType == SeedType.SEED_LILYPAD
                 || theSeedType == SeedType.SEED_TANGLEKELP
                 || theSeedType == SeedType.SEED_SEASHROOM
@@ -4456,21 +4447,11 @@ public class Plant extends GameObject {
 
     /** Plant.cpp:5117-5122. */
     public static boolean isFlying(int theSeedtype) {
-        if (theSeedtype >= SeedType.CUSTOM_SEED_FIRST) {
-            CustomPlantType aCustom = PlantTypeRegistry.get(theSeedtype);
-            return aCustom != null && aCustom.mFlying;
-        }
-
         return theSeedtype == SeedType.SEED_INSTANT_COFFEE;
     }
 
     /** Plant.cpp:5124-5134. */
     public static boolean isUpgrade(int theSeedtype) {
-        if (theSeedtype >= SeedType.CUSTOM_SEED_FIRST) {
-            CustomPlantType aCustom = PlantTypeRegistry.get(theSeedtype);
-            return aCustom != null && aCustom.mUpgrade;
-        }
-
         return theSeedtype == SeedType.SEED_GATLINGPEA
                 || theSeedtype == SeedType.SEED_WINTERMELON
                 || theSeedtype == SeedType.SEED_TWINSUNFLOWER
@@ -4483,13 +4464,6 @@ public class Plant extends GameObject {
 
     /** Plant.cpp:5136-5158. */
     public Rect getPlantRect() {
-        if (mSeedType >= SeedType.CUSTOM_SEED_FIRST) {
-            Rect aCustomRect = PlantTypeRegistry.plantRect(this);
-            if (aCustomRect != null) {
-                return aCustomRect;
-            }
-        }
-
         if (mSeedType == SeedType.SEED_TALLNUT) {
             return new Rect(mX + 10, mY, mWidth, mHeight);
         } else if (mSeedType == SeedType.SEED_PUMPKINSHELL) {
@@ -4503,13 +4477,6 @@ public class Plant extends GameObject {
 
     /** Plant.cpp:5160-5190. */
     public Rect getPlantAttackRect(int thePlantWeapon) {
-        if (mSeedType >= SeedType.CUSTOM_SEED_FIRST) {
-            Rect aCustomRect = PlantTypeRegistry.plantAttackRect(this, thePlantWeapon);
-            if (aCustomRect != null) {
-                return aCustomRect;
-            }
-        }
-
         if (mApp.isWallnutBowlingLevel()) {
             return new Rect(mX, mY, mWidth - 20, mHeight);
         } else if (thePlantWeapon == PlantWeapon.WEAPON_SECONDARY && mSeedType == SeedType.SEED_SPLITPEA) {

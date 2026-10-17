@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import cn.enaium.fabricpvz.portable.pvzp.PakWriter;
 import cn.enaium.fabricpvz.portable.pvzp.TestAssets;
+import cn.enaium.fabricpvz.portable.sexy.Common;
 import cn.enaium.fabricpvz.portable.sexy.pak.PakInterface;
 
 /** Verifies the ported {@link ImageLib} decoders, alpha-companion rules and writers. */
@@ -225,6 +226,37 @@ class ImageLibTest {
         ImageLib.Image applied = ImageLib.getImage("img/only");
         assertNotNull(applied);
         assertArrayEquals(new int[] {0x7F0000FF}, applied.getBits(), "ApplyAlphaAsImage uses gAlphaComposeColor");
+    }
+
+    /**
+     * Defect A of docs/VERIFICATION.md §59 — the exact shape of the Windows startup failure.
+     *
+     * <p>{@code data/BrianneTod32.txt} names its layer image {@code BrianneTod32Outline}, and
+     * {@code FontData} resolves that against the descriptor's own directory through
+     * {@link Common#getPathFrom(String, String)}. The ten font images of the retail pak exist only as
+     * {@code '_'}-prefixed alpha companions, so the whole load depends on
+     * {@link ImageLib}'s companion probe ({@code theFilename.rfind('/')}, ImageLib.cpp:1259-1293)
+     * seeing a {@code '/'} separator. With native separators the probe looked up
+     * {@code _data\BrianneTod32Outline}, found nothing, and the font descriptor aborted with
+     * "Failed to Load Image" — the fatal error that stopped the game from ever drawing a frame.
+     */
+    @Test
+    void resolvesAFontLayerImageNamedByAWindowsStyleDescriptorPath() throws IOException {
+        int[] alphaOnly = {0x000000FF, 0x00000080};
+        Map<String, byte[]> members = new LinkedHashMap<>();
+        members.put("data/_BrianneTod32Outline.png", encode(argb(2, 1, alphaOnly), "png"));
+        mount(members);
+
+        String descriptor = "data\\BrianneTod32.txt";
+        String imageName = Common.getPathFrom("BrianneTod32Outline", Common.getFileDir(descriptor));
+        assertEquals("data/BrianneTod32Outline", imageName, "the layer name must stay a portable path");
+
+        ImageLib.gAlphaComposeColor = 0x0000FF;
+        ImageLib.Image image = ImageLib.getImage(imageName);
+
+        assertNotNull(image, "the '_'-companion lookup must succeed for a Windows-style descriptor path");
+        assertEquals(2, image.getWidth());
+        assertArrayEquals(new int[] {0xFF0000FF, 0x800000FF}, image.getBits());
     }
 
     @Test

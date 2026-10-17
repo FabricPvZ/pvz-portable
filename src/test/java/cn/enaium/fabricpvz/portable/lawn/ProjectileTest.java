@@ -12,7 +12,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import cn.enaium.fabricpvz.portable.pvzp.DataArray;
 import cn.enaium.fabricpvz.portable.pvzp.fx.FoleyType;
+import cn.enaium.fabricpvz.portable.pvzp.reanim.Attachment;
 import cn.enaium.fabricpvz.portable.pvzp.reanim.AttachmentIDRef;
+import cn.enaium.fabricpvz.portable.pvzp.reanim.Reanimation;
 import cn.enaium.fabricpvz.portable.sexy.Rect;
 import cn.enaium.fabricpvz.portable.test.HeadlessTestApp;
 
@@ -118,6 +120,38 @@ class ProjectileTest {
     }
 
     // ------------------------------------------------------------------ table
+
+    /** A directly fired fireball needs the flame body {@code ConvertToFireball} attaches. */
+    @Test
+    void aDirectlyCreatedFireballCarriesItsFlameBody() {
+        Projectile aFireball = mBoard.addProjectile(100, 200, 400000, 0, ProjectileType.PROJECTILE_FIREBALL);
+
+        assertNotNull(aFireball, "the board must accept a directly fired fireball");
+        assertEquals(ProjectileType.PROJECTILE_FIREBALL, aFireball.mProjectileType);
+        // Projectile::Draw has no image for this type (Projectile.cpp:940-1000 leaves {@code aImage}
+        // null), so a fireball without its attached reanimation would draw its shadow and nothing else
+        // - which is what a directly created one did before this test existed.
+        Reanimation aBody = Attachment.findReanimAttachment(aFireball.mAttachmentID);
+        assertNotNull(aBody, "a directly created fireball must carry the flame reanimation");
+        assertEquals(ReanimationType.REANIM_FIRE_PEA, aBody.mReanimationType);
+        assertEquals(ReanimLoopType.REANIM_LOOP, aBody.mLoopType);
+    }
+
+    /** The torchwood conversion attaches the same body, and only once per grid it converts at. */
+    @Test
+    void convertingAPeaAttachesOneFlameBodyAndOnlyOncePerGrid() {
+        Projectile aPea = mBoard.addProjectile(100, 200, 400000, 0, ProjectileType.PROJECTILE_PEA);
+        assertNotNull(aPea);
+
+        aPea.convertToFireball(3);
+        Reanimation aBody = Attachment.findReanimAttachment(aPea.mAttachmentID);
+        assertNotNull(aBody, "the torchwood conversion attaches the flame body");
+        assertEquals(ReanimationType.REANIM_FIRE_PEA, aBody.mReanimationType);
+
+        aPea.convertToFireball(3);
+        assertSame(aBody, Attachment.findReanimAttachment(aPea.mAttachmentID),
+                "the same torchwood does not convert the pea twice (Projectile.cpp:1197-1200)");
+    }
 
     @Test
     void definitionTableCoversEveryProjectileType() {

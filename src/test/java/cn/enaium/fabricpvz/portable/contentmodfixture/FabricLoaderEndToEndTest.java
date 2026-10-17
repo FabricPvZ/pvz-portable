@@ -2,18 +2,24 @@ package cn.enaium.fabricpvz.portable.contentmodfixture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
@@ -26,6 +32,7 @@ import cn.enaium.fabricpvz.portable.lawn.ReanimationType;
 import cn.enaium.fabricpvz.portable.lawn.SeedType;
 import cn.enaium.fabricpvz.portable.lawn.ZombieType;
 import cn.enaium.fabricpvz.portable.pvzp.TestAssets;
+import cn.enaium.fabricpvz.portable.sexy.pak.PakInterface;
 
 /**
  * End-to-end verification of the mod ecosystem on the <em>real</em> Fabric Loader.
@@ -33,7 +40,7 @@ import cn.enaium.fabricpvz.portable.pvzp.TestAssets;
  * <p>The test starts the loader the way a launcher does — a second JVM whose main class is
  * {@value #LAUNCHER_CLASS} — with the game, the loader (plus Mixin and ASM) and the game provider on
  * the class path and a real {@code mods/} directory holding three mod jars: the API's aggregate jar
- * (which carries its four feature modules nested, copied in by {@code :testModsJar}), the example mod
+ * (which carries its five feature modules nested, copied in by {@code :testModsJar}), the example mod
  * built by {@code :pvz-example-mod} (events + Mixin) and a throwaway mod jar assembled here from
  * {@link ContentMod}, which registers a plant and a zombie through the public content API.
  * <strong>Nothing of the API is on the class path</strong>, in either mode the test runs: like every
@@ -61,9 +68,10 @@ class FabricLoaderEndToEndTest {
     /** Mod dependencies of the fixture mod; the negative test replaces this block. */
     private static final String MOD_DEPENDENCIES = """
             "fabricloader": ">=0.19.0",
-            "fabric-api": ">=1.0.0",
-            "api-plant": ">=1.0.0",
-            "api-zombie": ">=1.0.0",
+            "fabric-api": ">=1.1.0",
+            "api-plant": ">=1.1.0",
+            "api-resource": ">=1.1.0",
+            "api-zombie": ">=1.1.0",
             "pvz-portable": "*"
             """;
 
@@ -73,11 +81,11 @@ class FabricLoaderEndToEndTest {
             "fabricloader", "java", "mixinextras",
             // the game, as the built-in mod the game provider declares
             "pvz-portable",
-            // the API, from the mods directory like every other mod: the aggregator and the four
+            // the API, from the mods directory like every other mod: the aggregator and the five
             // feature modules nested inside it (our own event bus lives in api-base, so the upstream
             // Fabric API base module is no longer part of it)
             "fabric-api", "api-base", "api-events", "api-plant",
-            "api-zombie",
+            "api-resource", "api-zombie",
             // the two mod jars the test itself installs: the example mod and the fixture mod
             "pvz-example-mod", "pvz-content-fixture-mod");
 
@@ -88,8 +96,45 @@ class FabricLoaderEndToEndTest {
         return List.copyOf(copy);
     }
 
+    /**
+     * The mods the resource-override run resolves: the same installation, with the override fixture
+     * mod in place of the content one.
+     */
+    private static final List<String> OVERRIDE_MODS = List.of(
+            "fabricloader", "java", "mixinextras",
+            "pvz-portable",
+            "fabric-api", "api-base", "api-events", "api-plant",
+            "api-resource", "api-zombie",
+            "pvz-example-mod", ResourceOverrideMod.MOD_ID);
+
     @TempDir
     Path tmp;
+
+    /** The loose file {@link ResourceOverrideMod}'s {@code addFile} registration serves. */
+    private Path overrideFile;
+
+    /** The loose directory {@link ResourceOverrideMod}'s {@code addRoot} registration serves. */
+    private Path overrideRoot;
+
+    /** Whether the launcher must skip booting the real game (see the harness's phase list). */
+    private boolean skipGameBoot;
+
+    /**
+     * Writes the loose files the override fixture mod's {@code addFile} / {@code addRoot}
+     * registrations serve, from the very byte generators the mod itself offers, and remembers their
+     * paths: {@link #launch} passes them to the launcher as system properties, because the mod runs
+     * in a second JVM that cannot see this test's objects.
+     */
+    private void createOverrideFixtures() throws IOException {
+        Path overrides = Files.createDirectories(tmp.resolve("overrides"));
+        overrideFile = overrides.resolve("file-override.bin");
+        Files.write(overrideFile, ResourceOverrideMod.fileOverrideBytes());
+
+        overrideRoot = Files.createDirectories(overrides.resolve("root"));
+        Path image = overrideRoot.resolve(ResourceOverrideMod.ROOT_RESOURCE);
+        Files.createDirectories(image.getParent());
+        Files.write(image, ResourceOverrideMod.rootImageBytes());
+    }
 
     @Test
     void bootsTheGameThroughTheRealLoaderWithModsAndReachesScenePlaying() throws Exception {
@@ -110,7 +155,7 @@ class FabricLoaderEndToEndTest {
         // 1) The loader itself: it resolved the game (built-in mod), the loader mod, the API modules
         // (mods on the class path) and the two mod jars from the mods directory.
         assertEquals("0.19.5", values.get("loaderVersion"), "the real Fabric Loader must be the one running");
-        assertEquals("1.0.0", values.get("gameVersion"), "the provider must report the game's version");
+        assertEquals("1.1.0", values.get("gameVersion"), "the provider must report the game's version");
         assertEquals("client", values.get("environment"));
         assertTrue(Boolean.parseBoolean(values.get("development")), "the test runs the loader in development mode");
         assertNotNull(values.get("modsLoaded"), "the fixture must report the loaded mods");
@@ -119,7 +164,7 @@ class FabricLoaderEndToEndTest {
         assertEquals(EXPECTED_MODS.size(), Integer.parseInt(values.get("modCount")));
 
         // 2) The API ran before the game entry point and sees the mods.
-        assertEquals("1.0.0", values.get("apiVersion"), "the API entry point must run before the game");
+        assertEquals("1.2.0", values.get("apiVersion"), "the API entry point must run before the game");
         assertEquals("true", values.get("apiInitialized"));
         assertEquals("true", values.get("plantModuleLoaded"));
         assertEquals("true", values.get("zombieModuleLoaded"));
@@ -268,6 +313,152 @@ class FabricLoaderEndToEndTest {
     }
 
     /**
+     * The proof that a mod's {@code api-resource} registrations are what the engine reads: a fixture
+     * mod registers one override of each kind ({@code addBytes} / {@code addFile} / {@code addRoot}),
+     * and this test compares what the engine's own {@link PakInterface} returns - inside the launcher
+     * JVM - with the bytes of that registration and with the retail {@code main.pak} member of the
+     * same name, which it reads itself here, in a JVM where no Mixin exists.
+     *
+     * <p>Every name involved exists in the retail pak, so each override shadows a member the game
+     * would otherwise serve; {@code reanim/PeaShooter.reanim} is registered by nothing, which is what
+     * makes "the override answered" distinguishable from "the reader hands out the file system or the
+     * pak for everything".
+     */
+    @Test
+    void theEnginesOwnReaderServesTheFixtureModsResourceOverrides() throws Exception {
+        Optional<Path> assets = TestAssets.resourceRoot();
+        assumeTrue(assets.isPresent(), "no retail installation on this machine: the overrides cannot be "
+                + "compared with the pak members they shadow");
+        Path retailRoot = assets.get();
+        assumeTrue(Files.isRegularFile(retailRoot.resolve("main.pak")),
+                "the retail main.pak is missing: " + retailRoot);
+
+        Path mods = Files.createDirectories(tmp.resolve("mods"));
+        copyInstalledMods(mods);
+        buildFixtureModJar(mods, ResourceOverrideMod.class, ResourceOverrideMod.MOD_ID,
+                "PvZ Resource Override Fixture Mod",
+                "Registers resource overrides through the resource API.", MOD_DEPENDENCIES);
+        createOverrideFixtures();
+        // This run needs the engine's reader with the pak mounted, not a game: the fixture's
+        // registrations are on the game's own reading path either way (they happen before the game
+        // entry point runs), so booting the game here would only test its tolerance of the fixture's
+        // stub content.
+        skipGameBoot = true;
+
+        Path runDir = Files.createDirectories(tmp.resolve("run"));
+        Path report = tmp.resolve("loader-report.txt");
+        Path output = tmp.resolve("loader-output.txt");
+
+        int exitCode = launch(mods, runDir, report, output);
+        assertEquals(0, exitCode, "the launcher must finish cleanly: " + failureMessage(output, report));
+        Map<String, String> values = readReport(report);
+        System.out.println("[loader-e2e] game-side report:\n" + Files.readString(report));
+
+        // 10) The module is live in this run: the fixture mod's entry point ran, api-resource came
+        // from the mods directory like every other mod and its PakInterface Mixin was applied.
+        assertEquals(sorted(OVERRIDE_MODS), List.of(values.get("modsLoaded").split(",")),
+                "the loader must resolve exactly these mods");
+        assertEquals("true", values.get("overrideModLoaded"));
+        assertEquals("true", values.get("resourceModuleLoaded"));
+        assertEquals("true", values.get("resourceOverridesInstalled"),
+                "api-resource's Mixin must be applied to the engine: without it no override can be served");
+        assertEquals("true", values.get("retailPakMounted"),
+                "the engine must have the retail main.pak mounted for the control read");
+        assertEquals("true", values.get("gameBootSkipped"), "this run must not boot the game");
+
+        // The registrations the module reports: addBytes and addFile appear by name (a root is
+        // resolved on demand, so images/Almanac.png legitimately cannot appear in this list).
+        assertEquals(List.of(upper(ResourceOverrideMod.FILE_RESOURCE),
+                        upper(ResourceOverrideMod.BYTES_RESOURCE)),
+                List.of(values.get("overriddenNames").split(",")),
+                "overriddenNames() must list exactly the addBytes and addFile registrations");
+        assertEquals(overrideFile.toAbsolutePath().normalize().toString(),
+                Path.of(values.get("fileOverrideRegistered")).toAbsolutePath().normalize().toString(),
+                "addFile must serve the file this test wrote");
+        assertEquals(overrideRoot.toAbsolutePath().normalize().toString(),
+                Path.of(values.get("rootOverrideRegistered")).toAbsolutePath().normalize().toString(),
+                "addRoot must serve the directory this test wrote");
+
+        // 11) addBytes: the engine's own read returns the in-memory fixture bytes, they are readable
+        // as the fixture's text, and the handle was not a pak member - the override answered.
+        byte[] lawnStrings = ResourceOverrideMod.lawnStringsBytes();
+        assertEquals("true", values.get("bytesOverrideServed"),
+                "readResource must return the addBytes content byte for byte");
+        assertEquals(sha256(lawnStrings), values.get("bytesOverrideReadSha256"));
+        assertEquals(String.valueOf(lawnStrings.length), values.get("bytesOverrideReadLength"));
+        assertEquals("true", values.get("bytesOverrideTextVisible"),
+                "the content must be the fixture's own text, not a coincidental match");
+        assertEquals("true", values.get("bytesOverrideExists"));
+        assertEquals("false", values.get("bytesOverrideFromPak"),
+                "an override must not be served as a pak member");
+        assertNotEquals(sha256(pakMember(retailRoot, ResourceOverrideMod.BYTES_RESOURCE)),
+                values.get("bytesOverrideReadSha256"),
+                "the retail pak's member of the same name must differ from what the engine read");
+
+        // 12) addFile: the same shape for the single-file registration.
+        byte[] fileBytes = ResourceOverrideMod.fileOverrideBytes();
+        assertEquals(sha256(fileBytes), values.get("fileOverrideExpectedSha256"),
+                "the harness must hash the very file this test wrote");
+        assertEquals(String.valueOf(fileBytes.length), values.get("fileOverrideExpectedLength"));
+        assertEquals("true", values.get("fileOverrideServed"));
+        assertEquals(sha256(fileBytes), values.get("fileOverrideReadSha256"));
+        assertEquals(String.valueOf(fileBytes.length), values.get("fileOverrideReadLength"));
+        assertEquals("true", values.get("fileOverrideExists"));
+        assertEquals("false", values.get("fileOverrideFromPak"));
+        assertNotEquals(sha256(pakMember(retailRoot, ResourceOverrideMod.FILE_RESOURCE)),
+                values.get("fileOverrideReadSha256"),
+                "the retail pak's member of the same name must differ from what the engine read");
+
+        // 13) addRoot: images/Almanac.png is answered by the registered directory, not by its name.
+        byte[] imageBytes = ResourceOverrideMod.rootImageBytes();
+        assertEquals(sha256(imageBytes), values.get("rootOverrideExpectedSha256"));
+        assertEquals("true", values.get("rootOverrideServed"));
+        assertEquals(sha256(imageBytes), values.get("rootOverrideReadSha256"));
+        assertEquals(String.valueOf(imageBytes.length), values.get("rootOverrideReadLength"));
+        assertEquals("true", values.get("rootOverrideExists"));
+        assertEquals("false", values.get("rootOverrideFromPak"));
+        assertNotEquals(sha256(pakMember(retailRoot, ResourceOverrideMod.ROOT_RESOURCE)),
+                values.get("rootOverrideReadSha256"),
+                "the retail pak's member of the same name must differ from what the engine read");
+
+        // 14) The control: a resource nobody registered still comes out of the mounted retail pak,
+        // byte for byte, and differs from all three overridden answers.
+        byte[] control = pakMember(retailRoot, ResourceOverrideMod.CONTROL_RESOURCE);
+        assertEquals(sha256(control), values.get("controlReadSha256"),
+                "an unoverridden resource must be served by the mounted retail pak");
+        assertEquals(String.valueOf(control.length), values.get("controlReadLength"));
+        assertEquals("true", values.get("controlFromPak"));
+        assertEquals("true", values.get("controlExists"));
+        assertEquals("true", values.get("controlDiffersFromOverrides"));
+        assertNotEquals(sha256(control), values.get("bytesOverrideReadSha256"));
+        assertNotEquals(sha256(control), values.get("fileOverrideReadSha256"));
+        assertNotEquals(sha256(control), values.get("rootOverrideReadSha256"));
+    }
+
+    /**
+     * A retail pak member's bytes, read with the engine's own reader in <em>this</em> JVM, where no
+     * Mixin is registered: exactly what the game would serve if the mod registered nothing.
+     */
+    private static byte[] pakMember(Path retailRoot, String member) throws Exception {
+        PakInterface engine = new PakInterface();
+        engine.setResourceFolder(retailRoot.toString());
+        Path pak = retailRoot.resolve("main.pak");
+        assertTrue(engine.addPakFile(pak), "the retail main.pak must mount: " + pak);
+        byte[] bytes = engine.readResource(member);
+        assertNotNull(bytes, "the retail pak must contain " + member);
+        return bytes;
+    }
+
+    /** The pak-path spelling the engine's own normalization produces (upper-case, '/' separators). */
+    private static String upper(String pakPath) {
+        return pakPath.toUpperCase(Locale.ROOT);
+    }
+
+    private static String sha256(byte[] data) throws Exception {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(data));
+    }
+
+    /**
      * Copies the mod jars the Gradle test task installs into {@code build/testmods} - the API's
      * aggregate jar and the example mod - into this test's own mods directory.
      */
@@ -327,6 +518,17 @@ class FabricLoaderEndToEndTest {
         command.add("-Dfabric.modsFolder=" + mods);
         command.add("-D" + ENTRYPOINT_PROPERTY + "=" + ContentModGameMain.class.getName());
         command.add("-Dpvz.test.report=" + report);
+        // The override fixture mod's registrations: they live in this test's temporary directory, so
+        // the launcher JVM learns their paths - and whether it should boot the game at all - here.
+        if (overrideFile != null) {
+            command.add("-D" + ResourceOverrideMod.FILE_OVERRIDE_PROPERTY + "=" + overrideFile);
+        }
+        if (overrideRoot != null) {
+            command.add("-D" + ResourceOverrideMod.ROOT_OVERRIDE_PROPERTY + "=" + overrideRoot);
+        }
+        if (skipGameBoot) {
+            command.add("-Dpvz.test.skipGameBoot=true");
+        }
         // Make the game class loader define this module's fixture classes: they must live in the same
         // class loader as the game, the API and the mods, otherwise the loader's copies and the test
         // module's copies of the same class would hold different static state.
@@ -353,20 +555,37 @@ class FabricLoaderEndToEndTest {
         return process.exitValue();
     }
 
-    /** Packages the compiled fixture mod class plus a generated {@code fabric.mod.json} into a jar. */
+    /** Packages the compiled {@link ContentMod} plus a generated {@code fabric.mod.json} into a jar. */
     private static void buildFixtureModJar(Path modsDir, String dependencies) throws Exception {
-        Path classes = Path.of(ContentMod.class.getProtectionDomain().getCodeSource().getLocation().toURI());
-        Path modRoot = classes.resolve("cn/enaium/fabricpvz/portable/contentmodfixture");
+        buildFixtureModJar(modsDir, ContentMod.class, ContentMod.MOD_ID, "PvZ Content Fixture Mod",
+                "Registers one plant and one zombie through the content API.", dependencies);
+    }
+
+    /**
+     * Packages a fixture mod: the compiled class (and its nested ones), plus a generated
+     * {@code fabric.mod.json}, into the mods directory.
+     *
+     * @param modClass the fixture's {@code ModInitializer}, compiled into the test sources
+     * @param modId the id the generated metadata declares
+     * @param name the display name the generated metadata declares
+     * @param description the metadata description
+     * @param dependencies the {@code depends} block of the generated metadata
+     */
+    private static void buildFixtureModJar(Path modsDir, Class<?> modClass, String modId, String name,
+            String description, String dependencies) throws Exception {
+        Path classes = Path.of(modClass.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Path modRoot = classes.resolve(modClass.getPackageName().replace('.', '/'));
         assertTrue(Files.isDirectory(modRoot), "fixture classes must be compiled: " + modRoot);
 
-        Path jar = modsDir.resolve(ContentMod.MOD_ID + ".jar");
+        String simpleName = modClass.getSimpleName();
+        Path jar = modsDir.resolve(modId + ".jar");
         String metadata = """
                 {
                   "schemaVersion": 1,
                   "id": "%s",
-                  "version": "1.0.0",
-                  "name": "PvZ Content Fixture Mod",
-                  "description": "Registers one plant and one zombie through the content API.",
+                  "version": "1.1.0",
+                  "name": "%s",
+                  "description": "%s",
                   "authors": ["PvZ Fabric"],
                   "license": "LGPL-3.0-or-later",
                   "environment": "*",
@@ -377,7 +596,7 @@ class FabricLoaderEndToEndTest {
                 %s
                   }
                 }
-                """.formatted(ContentMod.MOD_ID, ContentMod.class.getName(), dependencies);
+                """.formatted(modId, name, description, modClass.getName(), dependencies);
 
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
             out.putNextEntry(new JarEntry("fabric.mod.json"));
@@ -386,7 +605,7 @@ class FabricLoaderEndToEndTest {
 
             // Only the mod's own class: the game entry point of the fixture stays on the class path.
             try (Stream<Path> files = Files.list(modRoot)) {
-                for (Path file : files.filter(FabricLoaderEndToEndTest::isModClass).toList()) {
+                for (Path file : files.filter(path -> isModClass(path, simpleName)).toList()) {
                     out.putNextEntry(new JarEntry(classes.relativize(file).toString().replace('\\', '/')));
                     out.write(Files.readAllBytes(file));
                     out.closeEntry();
@@ -402,9 +621,9 @@ class FabricLoaderEndToEndTest {
         return Path.of(ContentMod.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toString();
     }
 
-    private static boolean isModClass(Path file) {
+    private static boolean isModClass(Path file, String simpleName) {
         String name = file.getFileName().toString();
-        return name.equals("ContentMod.class") || name.startsWith("ContentMod$");
+        return name.equals(simpleName + ".class") || name.startsWith(simpleName + "$");
     }
 
     private static Map<String, String> readReport(Path report) throws IOException {

@@ -300,6 +300,40 @@ class CommonTest {
         assertTrue(aFullPath.endsWith("/x"));
     }
 
+    /**
+     * Defect A of docs/VERIFICATION.md §59: on Windows the framework's path helpers used to hand
+     * back native separators ({@code data\BrianneTod32Outline}), while every consumer of those
+     * strings — {@code ImageLib}'s {@code '_'} companion probe ({@code rfind('/')}), the pak member
+     * table, {@code GetFileDir(..., withSlash)}'s appended {@code '/'} — only understands
+     * {@code '/'}. The whole string side of {@code Common} therefore speaks portable paths on every
+     * host: a Windows-style input is understood as such, and no output ever carries {@code '\'}.
+     *
+     * <p>Every expectation below holds on macOS/Linux too, which is what keeps the Windows behaviour
+     * under test on machines that cannot run Windows.
+     */
+    @Test
+    void pathHelpersSpeakPortablePathsOnEveryHost() {
+        // The font-descriptor chain of PvZ: data/BrianneTod32.txt names the layer image
+        // "BrianneTod32Outline", which FontData resolves against the descriptor's directory
+        // (FontData loadLayerSetImage -> Common.getPathFrom(..., Common.getFileDir(mSourceFile))).
+        assertEquals("data", Common.getFileDir("data\\BrianneTod32.txt"));
+        assertEquals("data/", Common.getFileDir("data\\BrianneTod32.txt", true));
+        assertEquals("BrianneTod32.txt", Common.getFileName("data\\BrianneTod32.txt"));
+        assertEquals("BrianneTod32", Common.getFileName("data\\BrianneTod32.txt", true));
+        assertEquals("data/BrianneTod32Outline", Common.getPathFrom("BrianneTod32Outline", "data"));
+        assertEquals("data/BrianneTod32Outline", Common.getPathFrom("BrianneTod32Outline", "data\\"));
+
+        // A native resource root, as it arrives from ResourceLocator on Windows.
+        assertEquals("C:/Games/PvZ/main.pak", Common.getPathFrom("main.pak", "C:\\Games\\PvZ"));
+
+        // Mixed separators normalize the same way in both directions, so the conversion is stable.
+        assertEquals("a/b/c", Common.getPathFrom("b\\c", "a/"));
+        assertEquals("a/b", Common.getFileDir("a/b\\c"));
+
+        assertFalse(Common.getCurDir().contains("\\"));
+        assertFalse(Common.getFullPath("x").contains("\\"));
+    }
+
     @Test
     void fileSystemHelpers(@TempDir Path theTempDir) {
         Path aDir = theTempDir.resolve("a/b");

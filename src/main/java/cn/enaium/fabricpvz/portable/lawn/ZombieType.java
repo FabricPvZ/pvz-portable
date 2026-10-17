@@ -45,22 +45,14 @@ public final class ZombieType {
     public static final int NUM_CACHED_ZOMBIE_TYPES = 35;
 
     /**
-     * First zombie type mods may allocate.
+     * Size of the zombie-type id space, i.e. the width of every table a zombie type indexes.
      *
-     * <p>Everything below it is upstream ({@code 0..NUM_ZOMBIE_TYPES-1} plus the two cached
-     * pole-vaulter rows). Ids from here on are handed out by
-     * {@link cn.enaium.fabricpvz.portable.lawn.content.ZombieTypeRegistry} and are never used by the
-     * upstream tables or {@code switch} statements, so mod content can never collide with them.
-     */
-    public static final int CUSTOM_ZOMBIE_FIRST = 64;
-
-    /**
-     * Size of every zombie-type-indexed table.
-     *
-     * <p>{@code 100} is the width upstream already reserves for {@code Board::mZombieAllowed}
-     * (Board.h), so every other per-zombie table is widened to the same bound: slot {@code n} holds
-     * the data of zombie type {@code n}, and the slots at or above {@link #CUSTOM_ZOMBIE_FIRST} are
-     * only ever read for registered mod zombies.
+     * <p>Rows stay index-aligned: slot {@code n} holds the data of zombie type {@code n}. {@code 100}
+     * is the width upstream already reserves for {@code Board::mZombieAllowed} (Board.h), so every
+     * other per-zombie table is as wide as this constant. The zombie types the retail game ships are
+     * the ones below {@link #NUM_ZOMBIE_TYPES} (plus the two cached pole-vaulter rows); a type whose
+     * row in the definition table is still empty ({@code null}) is one nobody has defined, see
+     * {@code Zombie#gZombieDefs}.
      */
     public static final int MAX_ZOMBIE_TYPES = 100;
 

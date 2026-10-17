@@ -3,12 +3,21 @@
  * src/Lawn/Widget/SeedChooserScreen.h:40-138.
  *
  * Pre-level plant selection screen ("Choose your plants" / "Let's Rock"). Selection is
- * click-to-toggle (ClickedSeedInChooser / ClickedSeedInBank); there is no drag & drop, no page
- * tabs and no mPage — see docs/research/04-reanim-ui.md §1 "IMPORTANT — divergences".
+ * click-to-toggle (ClickedSeedInChooser / ClickedSeedInBank); there is no drag & drop — see
+ * docs/research/04-reanim-ui.md §1 "IMPORTANT — divergences".
+ *
+ * <p>PORT-NOTE: upstream draws one grid of seed packets, sized for the retail seed types, so a seed
+ * type above them has no square to sit in. The port pages the grid instead: page 0 is the upstream
+ * grid, every page after it shows the seed types above the retail range that have a definition and
+ * that the player may pick ({@link #rebuildPageSeeds}), and the two arrows the screen draws next to
+ * "Let's Rock" switch between the pages. Nothing else about the screen changes - the imitater keeps
+ * its own button, the bank keeps its slots, and a seed that is not on the page on screen is simply
+ * not drawn (it is still in the bank if it was picked).
  */
 package cn.enaium.fabricpvz.portable.lawn.widget;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import cn.enaium.fabricpvz.portable.lawn.AdviceType;
@@ -16,6 +25,7 @@ import cn.enaium.fabricpvz.portable.lawn.Board;
 import cn.enaium.fabricpvz.portable.lawn.ChosenSeedState;
 import cn.enaium.fabricpvz.portable.lawn.CursorType;
 import cn.enaium.fabricpvz.portable.lawn.Dialogs;
+import cn.enaium.fabricpvz.portable.lawn.DrawStringJustification;
 import cn.enaium.fabricpvz.portable.lawn.GameConstants;
 import cn.enaium.fabricpvz.portable.lawn.GameMode;
 import cn.enaium.fabricpvz.portable.lawn.ImageID;
@@ -44,6 +54,7 @@ import cn.enaium.fabricpvz.portable.sexy.Point;
 import cn.enaium.fabricpvz.portable.sexy.Rect;
 import cn.enaium.fabricpvz.portable.sexy.SexyAppBase;
 import cn.enaium.fabricpvz.portable.sexy.Widget;
+import cn.enaium.fabricpvz.portable.sexy.graphics.Font;
 import cn.enaium.fabricpvz.portable.sexy.graphics.Graphics;
 import cn.enaium.fabricpvz.portable.sexy.graphics.Image;
 import cn.enaium.fabricpvz.portable.lawn.MusicTune;
@@ -56,6 +67,8 @@ public class SeedChooserScreen extends Widget {
     private static final int SEED_CHOOSER_SCREEN_MENU = 104;
     private static final int SEED_CHOOSER_SCREEN_STORE = 105;
     private static final int SEED_CHOOSER_SCREEN_IMITATER = 106;
+    private static final int SEED_CHOOSER_SCREEN_PREV_PAGE = 107;
+    private static final int SEED_CHOOSER_SCREEN_NEXT_PAGE = 108;
 
     /** Chooser grid geometry, SeedChooserScreen.cpp:284-306. */
     public static final int CHOOSER_COLUMNS = 8;
@@ -65,6 +78,29 @@ public class SeedChooserScreen extends Widget {
     public static final int CHOOSER_Y_ORIGIN_7_ROWS = 123;
     public static final int CHOOSER_ROW_PITCH_6_ROWS = 73;
     public static final int CHOOSER_Y_ORIGIN_6_ROWS = 128;
+
+    /**
+     * Seed types one page of the grid holds: {@link #CHOOSER_COLUMNS} columns of six rows. The
+     * imitater sits on its own button rather than in the grid (SeedChooserScreen.cpp:284-292), so page
+     * 0 holds the retail seed types {@code 0 .. NUM_SEEDS_IN_CHOOSER-1} in those squares.
+     */
+    public static final int CHOOSER_PAGE_SIZE = CHOOSER_COLUMNS * 6;
+
+    /**
+     * The page arrows' geometry: one arrow square on either side of "Let's Rock" (154..310 by
+     * 545..587), each drawn as a glyph and hit-tested in {@code MouseDown} rather than being a
+     * {@code GameButton} like the row around it - the arrows are the port's own, and an upstream-font
+     * glyph needs no art of its own.
+     */
+    public static final int PAGE_BUTTON_WIDTH = 22;
+    public static final int PAGE_BUTTON_HEIGHT = 30;
+    public static final int PAGE_PREV_BUTTON_X = 128;
+    public static final int PAGE_NEXT_BUTTON_X = 312;
+    public static final int PAGE_BUTTON_Y = 552;
+
+    /** Position of the "{@code page/total}" counter, on the free square right of the imitater button. */
+    public static final int PAGE_COUNTER_X = 596;
+    public static final int PAGE_COUNTER_Y = 536;
 
     /** Imitater button position, SeedChooserScreen.cpp:146. */
     public static final int IMITATER_BUTTON_X = 464;
@@ -88,6 +124,35 @@ public class SeedChooserScreen extends Widget {
     public int mToolTipSeed;
     public int mLastMouseX;
     public int mLastMouseY;
+    /** Page of the grid on screen; 0 is the retail page, see {@link #rebuildPageSeeds()}. */
+    public int mPage;
+    /** How many pages the grid has, at least 1. */
+    public int mNumPages;
+    /**
+     * Seed types the page on screen shows, in grid order: slot {@code n} of the page is
+     * {@code mPageSeeds.get(n)}, and its square is {@code getSeedPositionInChooser(n, ...)} (the
+     * imitater's slot is its own button, SeedChooserScreen.cpp:284-292).
+     */
+    private final List<Integer> mPageSeeds = new ArrayList<>(CHOOSER_PAGE_SIZE + 1);
+    /**
+     * Slot of a seed type on the page on screen, or {@code -1} when that page does not show it: the
+     * draw loops read it to leave the other pages alone, the hit test to keep their squares
+     * unclickable, and {@link #getSeedPositionInChooser(int, ChosenSeed)} to place a seed on its own
+     * page whatever page is on screen.
+     */
+    private final int[] mPageSlotOf = new int[SeedType.MAX_SEED_TYPES];
+    /**
+     * Slot of a seed type on the page that shows it, or {@code -1} when no page does: the page on
+     * screen places the seeds it shows through {@link #mPageSlotOf}, and a seed of another page keeps
+     * its own page's slot so a packet that comes back from the bank knows where it belongs.
+     */
+    private final int[] mSeedSlotOf = new int[SeedType.MAX_SEED_TYPES];
+    /**
+     * Seed types above the retail range that the pages after page 0 are made of, in id order: those
+     * with a definition that the player may pick. Rebuilt with the pages, see
+     * {@link #rebuildPageSeeds()}.
+     */
+    private final List<Integer> mExtraSeeds = new ArrayList<>();
     /** Scratch out-param for the position getters, so the draw/update paths allocate nothing. */
     private final Point mTempPoint = new Point();
     /** Scratch hit-test rect, mirroring upstream's stack-local {@code Rect} in SeedHitTest. */
@@ -260,6 +325,7 @@ public class SeedChooserScreen extends Widget {
             crazyDavePickSeeds();
         }
         updateImitaterButton();
+        rebuildPageSeeds();
     }
 
     // SeedChooserScreen.cpp:207-223
@@ -362,16 +428,11 @@ public class SeedChooserScreen extends Widget {
     }
 
     // SeedChooserScreen.cpp:284-306
-    public void getSeedPositionInChooser(int theIndex, ChosenSeed theChosenSeed) {
-        if (theIndex == SeedType.SEED_IMITATER) {
-            theChosenSeed.mX = mImitaterButton.mX;
-            theChosenSeed.mY = mImitaterButton.mY;
-        } else {
-            Point aPos = new Point();
-            getSeedPositionInChooser(theIndex, has7Rows(), aPos);
-            theChosenSeed.mX = aPos.mX;
-            theChosenSeed.mY = aPos.mY;
-        }
+    public void getSeedPositionInChooser(int theSlot, ChosenSeed theChosenSeed) {
+        Point aPos = mTempPoint;
+        getSeedPositionInChooser(theSlot, aPos);
+        theChosenSeed.mX = aPos.mX;
+        theChosenSeed.mY = aPos.mY;
     }
 
     /**
@@ -390,13 +451,173 @@ public class SeedChooserScreen extends Widget {
         }
     }
 
-    public void getSeedPositionInChooser(int theIndex, Point out) {
-        if (theIndex == SeedType.SEED_IMITATER) {
+    /**
+     * Place of one slot of the page on screen (SeedChooserScreen.cpp:294-305): the grid square of the
+     * slot, or the imitater's own button for the slot the imitater takes
+     * (SeedChooserScreen.cpp:284-292).
+     */
+    public void getSeedPositionInChooser(int theSlot, Point out) {
+        getSeedSlotPosition(theSlot, theSlot < mPageSeeds.size() ? mPageSeeds.get(theSlot) : SeedType.SEED_NONE, out);
+    }
+
+    /** The place of one slot of a page, told which seed type sits in it (the imitater has its own). */
+    private void getSeedSlotPosition(int theSlot, int theSeedType, Point out) {
+        if (theSeedType == SeedType.SEED_IMITATER) {
             out.mX = mImitaterButton.mX;
             out.mY = mImitaterButton.mY;
         } else {
-            getSeedPositionInChooser(theIndex, has7Rows(), out);
+            getSeedPositionInChooser(theSlot, has7Rows(), out);
         }
+    }
+
+    /**
+     * Place of a seed type's square: the square of the page that shows it, whether or not that page is
+     * the one on screen. A packet that is clicked in the bank flies back to the page it came from, so
+     * the target is its own page's square and not the square of a slot of the page on screen.
+     */
+    private void seedPositionInChooser(int theSeedType, Point out) {
+        int aSlot = mPageSlotOf[theSeedType] >= 0 ? mPageSlotOf[theSeedType] : mSeedSlotOf[theSeedType];
+        if (aSlot < 0) {
+            // No page shows the seed (it was unregistered between the click and the landing): leave it
+            // where it is rather than moving it to a square of a page it is not on.
+            ChosenSeed aChosenSeed = mChosenSeeds[theSeedType];
+            out.mX = aChosenSeed.mX;
+            out.mY = aChosenSeed.mY;
+            return;
+        }
+        getSeedSlotPosition(aSlot, theSeedType, out);
+    }
+
+    /**
+     * Rebuilds the pages and places the seeds of the page on screen.
+     *
+     * <p>Page 0 is the retail grid: seed types {@code 0 .. NUM_SEEDS_IN_CHOOSER-1}, all of them,
+     * exactly the squares upstream fills (a seed the player has not unlocked yet draws as a
+     * silhouette). Every page after it shows up to {@link #CHOOSER_PAGE_SIZE} seed types above the
+     * retail range, in id order, and only those the player may pick: the chooser is where a player
+     * picks plants, so a seed type the game has no definition for and one that is not unlocked yet are
+     * on no page at all. The page on screen is clamped when the count shrinks (a seed type can go away
+     * again while the game runs).
+     */
+    private void rebuildPageSeeds() {
+        mExtraSeeds.clear();
+        for (int aSeedType = SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
+            if (Plant.getPlantDefinition(aSeedType) != null && mApp.hasSeedType(aSeedType)) {
+                mExtraSeeds.add(aSeedType);
+            }
+        }
+
+        mNumPages = 1 + (mExtraSeeds.size() + CHOOSER_PAGE_SIZE - 1) / CHOOSER_PAGE_SIZE;
+        if (mPage >= mNumPages) {
+            mPage = mNumPages - 1;
+        }
+
+        mPageSeeds.clear();
+        if (mPage == 0) {
+            for (int aSeedType = 0; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+                mPageSeeds.add(aSeedType);
+            }
+        } else {
+            int aFrom = (mPage - 1) * CHOOSER_PAGE_SIZE;
+            for (int i = aFrom; i < Math.min(aFrom + CHOOSER_PAGE_SIZE, mExtraSeeds.size()); i++) {
+                mPageSeeds.add(mExtraSeeds.get(i));
+            }
+        }
+
+        Arrays.fill(mPageSlotOf, -1);
+        Arrays.fill(mSeedSlotOf, -1);
+        for (int aSeedType = 0; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+            mSeedSlotOf[aSeedType] = aSeedType;
+        }
+        for (int i = 0; i < mExtraSeeds.size(); i++) {
+            mSeedSlotOf[mExtraSeeds.get(i)] = i % CHOOSER_PAGE_SIZE;
+
+            // A seed type that has a page joins the chooser here, whether or not that page is the one
+            // on screen: it is the chooser's seed from now on (see Update, which animates every seed
+            // the player has), and only its position waits for its page to come on screen.
+            ChosenSeed aChosenSeed = mChosenSeeds[mExtraSeeds.get(i)];
+            if (aChosenSeed.mSeedType != mExtraSeeds.get(i)) {
+                aChosenSeed.mSeedType = mExtraSeeds.get(i);
+                aChosenSeed.mSeedState = ChosenSeedState.SEED_IN_CHOOSER;
+            }
+        }
+        for (int aSlot = 0; aSlot < mPageSeeds.size(); aSlot++) {
+            mPageSlotOf[mPageSeeds.get(aSlot)] = aSlot;
+        }
+
+        for (int aSlot = 0; aSlot < mPageSeeds.size(); aSlot++) {
+            ChosenSeed aChosenSeed = mChosenSeeds[mPageSeeds.get(aSlot)];
+            int aSeedState = aChosenSeed.mSeedState;
+            if (aSeedState == ChosenSeedState.SEED_IN_BANK || aSeedState == ChosenSeedState.SEED_FLYING_TO_BANK
+                    || aSeedState == ChosenSeedState.SEED_FLYING_TO_CHOOSER) {
+                // It is the bank's (or on its way there or back): the bank places it, not this page.
+                continue;
+            }
+
+            getSeedPositionInChooser(aSlot, aChosenSeed);
+            aChosenSeed.mStartX = aChosenSeed.mX;
+            aChosenSeed.mStartY = aChosenSeed.mY;
+            aChosenSeed.mEndX = aChosenSeed.mX;
+            aChosenSeed.mEndY = aChosenSeed.mY;
+        }
+    }
+
+    /**
+     * Shows one page of the grid: the seeds of the new page are placed where it wants them, which is
+     * also why the packs in flight land first - a landing packet computes its square from the page it
+     * belongs to, and one halfway to the page that was on screen would jump.
+     */
+    public void switchPage(int thePage) {
+        if (thePage < 0 || thePage >= mNumPages || thePage == mPage
+                || mChooseState == SeedChooserState.CHOOSE_VIEW_LAWN) {
+            return;
+        }
+
+        // A landing packet computes the square it belongs to from its own page, so the ones in flight
+        // land before the pages move (the same thing MouseDown does before it reads the arrows).
+        if (mSeedsInFlight > 0) {
+            for (int aSeedType = 0; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
+                landFlyingSeed(mChosenSeeds[aSeedType]);
+            }
+        }
+
+        mPage = thePage;
+        rebuildPageSeeds();
+        removeToolTip();
+        mApp.playSample(SoundType.SOUND_TAP);
+    }
+
+    /** Whether (x, y) is inside the page arrow at {@code theButtonX} (the arrows are not widgets). */
+    public static boolean pageButtonHit(int theButtonX, int x, int y) {
+        return x >= theButtonX && x < theButtonX + PAGE_BUTTON_WIDTH
+                && y >= PAGE_BUTTON_Y && y < PAGE_BUTTON_Y + PAGE_BUTTON_HEIGHT;
+    }
+
+    /**
+     * The two page arrows and the page counter, drawn next to "Let's Rock" while the grid has more than
+     * one page. With a single page nothing is drawn and nothing is clickable, so a game whose seed
+     * types all fit on page 0 has exactly the upstream screen.
+     */
+    private void drawPageButtons(Graphics g) {
+        if (mNumPages <= 1) {
+            return;
+        }
+
+        Font aFont = Resources.getFontById(Resources.FONT_DWARVENTODCRAFT18YELLOW_ID);
+        drawPageArrow(g, aFont, PAGE_PREV_BUTTON_X, "<", mPage > 0);
+        drawPageArrow(g, aFont, PAGE_NEXT_BUTTON_X, ">", mPage < mNumPages - 1);
+        PvzpCommon.pvzpDrawString(g, (mPage + 1) + "/" + mNumPages, PAGE_COUNTER_X, PAGE_COUNTER_Y, aFont,
+                Color.White, DrawStringJustification.DS_ALIGN_CENTER);
+    }
+
+    /** One page arrow: a glyph in the label colours of the row around it, brighter while hovered. */
+    private void drawPageArrow(Graphics g, Font theFont, int theButtonX, String theGlyph, boolean theEnabled) {
+        boolean aHovered = theEnabled && mMouseVisible && mChooseState != SeedChooserState.CHOOSE_VIEW_LAWN
+                && pageButtonHit(theButtonX, mLastMouseX, mLastMouseY);
+        Color aColor = !theEnabled ? new Color(64, 64, 64) : aHovered ? new Color(200, 200, 255) : Color.White;
+        PvzpCommon.pvzpDrawString(g, theGlyph, theButtonX + PAGE_BUTTON_WIDTH / 2,
+                PAGE_BUTTON_Y + (PAGE_BUTTON_HEIGHT + theFont.getAscent()) / 2 - 1, theFont, aColor,
+                DrawStringJustification.DS_ALIGN_CENTER);
     }
 
     // SeedChooserScreen.cpp:308-312
@@ -451,17 +672,23 @@ public class SeedChooserScreen extends Widget {
                 Resources.getFontById(Resources.FONT_DWARVENTODCRAFT18YELLOW_ID), Color.White,
                 cn.enaium.fabricpvz.portable.lawn.DrawStringJustification.DS_ALIGN_CENTER);
 
-        int aNumSeeds = has7Rows() ? 48 : 40;
-        for (int aSeedShadow = SeedType.SEED_PEASHOOTER; aSeedShadow < aNumSeeds; aSeedShadow++) {
-            getSeedPositionInChooser(aSeedShadow, mTempPoint);
-            if (aSeedShadow == SeedType.SEED_IMITATER) {
+        // The empty squares of the page: a seed that is in the bank (or on its way there or back) shows
+        // as a dimmed packet in its square, a seed type the player has not unlocked yet as a
+        // silhouette. Upstream draws 48 squares with seven rows and 40 with six
+        // (SeedChooserScreen.cpp:340); every page after page 0 holds at most CHOOSER_PAGE_SIZE seeds,
+        // all of them the player's.
+        int aNumSquares = mPage == 0 ? (has7Rows() ? 48 : 40) : mPageSeeds.size();
+        for (int aSlot = 0; aSlot < Math.min(aNumSquares, mPageSeeds.size()); aSlot++) {
+            int aSeedType = mPageSeeds.get(aSlot);
+            if (aSeedType == SeedType.SEED_IMITATER) {
                 continue;
             }
+            getSeedPositionInChooser(aSlot, mTempPoint);
 
-            if (mApp.hasSeedType(aSeedShadow)) {
-                ChosenSeed aChosenSeed = mChosenSeeds[aSeedShadow];
+            if (mApp.hasSeedType(aSeedType)) {
+                ChosenSeed aChosenSeed = mChosenSeeds[aSeedType];
                 if (aChosenSeed.mSeedState != ChosenSeedState.SEED_IN_CHOOSER) {
-                    SeedPacket.drawSeedPacket(g, mTempPoint.mX, mTempPoint.mY, aSeedShadow, SeedType.SEED_NONE, 0, 55, true, false);
+                    SeedPacket.drawSeedPacket(g, mTempPoint.mX, mTempPoint.mY, aSeedType, SeedType.SEED_NONE, 0, 55, true, false);
                 }
             } else {
                 g.drawImage(Resources.getImageById(ImageID.IMAGE_SEEDPACKETSILHOUETTE), mTempPoint.mX, mTempPoint.mY);
@@ -476,9 +703,15 @@ public class SeedChooserScreen extends Widget {
             }
         }
 
-        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+        // Every seed the player has: one in the bank draws at its bank square, one on the page on
+        // screen at its chooser square, and one on another page not at all - its packet is drawn again
+        // when that page comes on screen.
+        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
             ChosenSeed aChosenSeed = mChosenSeeds[aSeedType];
             int aSeedState = aChosenSeed.mSeedState;
+            if (aSeedState == ChosenSeedState.SEED_IN_CHOOSER && mPageSlotOf[aSeedType] < 0) {
+                continue;
+            }
             if (mApp.hasSeedType(aSeedType) && aSeedState != ChosenSeedState.SEED_FLYING_TO_BANK
                     && aSeedState != ChosenSeedState.SEED_FLYING_TO_CHOOSER
                     && aSeedState != ChosenSeedState.SEED_PACKET_HIDDEN
@@ -501,7 +734,7 @@ public class SeedChooserScreen extends Widget {
         }
 
         mImitaterButton.draw(g);
-        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
             ChosenSeed aChosenSeed = mChosenSeeds[aSeedType];
             int aSeedState = aChosenSeed.mSeedState;
             if (mApp.hasSeedType(aSeedType) && (aSeedState == ChosenSeedState.SEED_FLYING_TO_BANK
@@ -511,6 +744,7 @@ public class SeedChooserScreen extends Widget {
             }
         }
 
+        drawPageButtons(g);
         mStartButton.draw(g);
         mRandomButton.draw(g);
         mViewLawnButton.draw(g);
@@ -636,7 +870,7 @@ public class SeedChooserScreen extends Widget {
         mSeedChooserAge++;
         mToolTip.update();
 
-        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
             if (mApp.hasSeedType(aSeedType)) {
                 ChosenSeed aChosenSeed = mChosenSeeds[aSeedType];
                 if (aChosenSeed.mSeedState == ChosenSeedState.SEED_FLYING_TO_BANK
@@ -832,7 +1066,7 @@ public class SeedChooserScreen extends Widget {
             aChosenSeed.mSeedIndexInBank = anIndex;
             mSeedsInBank++;
         }
-        for (int aSeedFlying = SeedType.SEED_PEASHOOTER; aSeedFlying < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedFlying++) {
+        for (int aSeedFlying = SeedType.SEED_PEASHOOTER; aSeedFlying < SeedType.MAX_SEED_TYPES; aSeedFlying++) {
             landFlyingSeed(mChosenSeeds[aSeedFlying]);
         }
         closeSeedChooser();
@@ -874,6 +1108,10 @@ public class SeedChooserScreen extends Widget {
             mMenuButton.mIsDown = false;
             updateCursor();
             mApp.doNewOptions(false);
+        } else if (theId == SEED_CHOOSER_SCREEN_PREV_PAGE) {
+            switchPage(mPage - 1);
+        } else if (theId == SEED_CHOOSER_SCREEN_NEXT_PAGE) {
+            switchPage(mPage + 1);
         } else if (mApp.getSeedsAvailable() >= mBoard.mSeedBank.mNumPackets) {
             if (theId == SEED_CHOOSER_SCREEN_START) {
                 onStartButton();
@@ -886,9 +1124,14 @@ public class SeedChooserScreen extends Widget {
     // SeedChooserScreen.cpp:766-778
     public int seedHitTest(int x, int y) {
         if (mMouseVisible) {
-            for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+            for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
                 ChosenSeed aChosenSeed = mChosenSeeds[aSeedType];
                 if (!mApp.hasSeedType(aSeedType) || aChosenSeed.mSeedState == ChosenSeedState.SEED_PACKET_HIDDEN) {
+                    continue;
+                }
+                // A seed of another page keeps the position of its own page: only a seed of the page on
+                // screen (or one that is in the bank) has a square at these coordinates.
+                if (aChosenSeed.mSeedState == ChosenSeedState.SEED_IN_CHOOSER && mPageSlotOf[aSeedType] < 0) {
                     continue;
                 }
                 mHitRect.mX = aChosenSeed.mX;
@@ -905,7 +1148,7 @@ public class SeedChooserScreen extends Widget {
 
     // SeedChooserScreen.cpp:780-791
     public int findSeedInBank(int theIndexInBank) {
-        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
             if (mApp.hasSeedType(aSeedType)) {
                 ChosenSeed aChosenSeed = mChosenSeeds[aSeedType];
                 if (aChosenSeed.mSeedState == ChosenSeedState.SEED_IN_BANK
@@ -985,7 +1228,9 @@ public class SeedChooserScreen extends Widget {
         }
         clickSeedInBank(theChosenSeed, mSeedChooserAge);
         Point aPos = new Point();
-        getSeedPositionInChooser(theChosenSeed.mSeedType, aPos);
+        // The seed's own page's square: the page on screen may be another one, and the packet still
+        // belongs to the square it came from.
+        seedPositionInChooser(theChosenSeed.mSeedType, aPos);
         theChosenSeed.mEndX = aPos.mX;
         theChosenSeed.mEndY = aPos.mY;
         mSeedsInBank--;
@@ -1065,7 +1310,7 @@ public class SeedChooserScreen extends Widget {
                     if (aChosenSeed.mSeedState == ChosenSeedState.SEED_IN_BANK) {
                         getSeedPositionInBank(aChosenSeed.mSeedIndexInBank, aSeedPos);
                     } else {
-                        getSeedPositionInChooser(aSeedType, aSeedPos);
+                        seedPositionInChooser(aSeedType, aSeedPos);
                     }
 
                     mToolTip.mX = Math.max(0, Math.min(GameConstants.BOARD_WIDTH - mToolTip.mWidth,
@@ -1130,13 +1375,17 @@ public class SeedChooserScreen extends Widget {
         super.mouseDown(x, y, theClickCount);
 
         if (mSeedsInFlight > 0) {
-            for (int i = 0; i < SeedType.NUM_SEEDS_IN_CHOOSER; i++) {
+            for (int i = 0; i < SeedType.MAX_SEED_TYPES; i++) {
                 landFlyingSeed(mChosenSeeds[i]);
             }
         }
 
         if (mChooseState == SeedChooserState.CHOOSE_VIEW_LAWN) {
             cancelLawnView();
+        } else if (mNumPages > 1 && pageButtonHit(PAGE_PREV_BUTTON_X, x, y)) {
+            switchPage(mPage - 1);
+        } else if (mNumPages > 1 && pageButtonHit(PAGE_NEXT_BUTTON_X, x, y)) {
+            switchPage(mPage + 1);
         } else if (mRandomButton.isMouseOver()) {
             mApp.playSample(SoundType.SOUND_TAP);
             buttonDepress(SEED_CHOOSER_SCREEN_RANDOM);
@@ -1203,7 +1452,7 @@ public class SeedChooserScreen extends Widget {
 
     // SeedChooserScreen.cpp:1072-1086
     public boolean pickedPlantType(int theSeedType) {
-        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
             ChosenSeed aChosenSeed = mChosenSeeds[aSeedType];
             if (aChosenSeed.mSeedState == ChosenSeedState.SEED_IN_BANK) {
                 if (aChosenSeed.mSeedType == theSeedType
@@ -1253,22 +1502,24 @@ public class SeedChooserScreen extends Widget {
 
     // SeedChooserScreen.cpp:1127-1143
     public void updateAfterPurchase() {
-        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.NUM_SEEDS_IN_CHOOSER; aSeedType++) {
+        // The purchase may have unlocked seed types, so the pages are rebuilt first: the loop below and
+        // the squares of the page on screen then already know the new set.
+        rebuildPageSeeds();
+
+        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
             ChosenSeed aChosenSeed = mChosenSeeds[aSeedType];
-            if (aChosenSeed.mSeedState == ChosenSeedState.SEED_IN_BANK) {
-                Point aPos = new Point();
-                getSeedPositionInBank(aChosenSeed.mSeedIndexInBank, aPos);
-                aChosenSeed.mX = aPos.mX;
-                aChosenSeed.mY = aPos.mY;
-            } else if (aChosenSeed.mSeedState == ChosenSeedState.SEED_IN_CHOOSER) {
-                getSeedPositionInChooser(aSeedType, aChosenSeed);
-            } else {
+            if (aChosenSeed.mSeedState != ChosenSeedState.SEED_IN_BANK) {
                 continue;
             }
-            aChosenSeed.mStartX = aChosenSeed.mX;
-            aChosenSeed.mStartY = aChosenSeed.mY;
-            aChosenSeed.mEndX = aChosenSeed.mX;
-            aChosenSeed.mEndY = aChosenSeed.mY;
+
+            Point aPos = new Point();
+            getSeedPositionInBank(aChosenSeed.mSeedIndexInBank, aPos);
+            aChosenSeed.mX = aPos.mX;
+            aChosenSeed.mY = aPos.mY;
+            aChosenSeed.mStartX = aPos.mX;
+            aChosenSeed.mStartY = aPos.mY;
+            aChosenSeed.mEndX = aPos.mX;
+            aChosenSeed.mEndY = aPos.mY;
         }
         enableStartButton(startButtonEnabled(mSeedsInBank, mBoard.mSeedBank.mNumPackets));
         updateImitaterButton();

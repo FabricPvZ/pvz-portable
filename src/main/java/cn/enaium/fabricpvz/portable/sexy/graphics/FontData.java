@@ -787,7 +787,16 @@ public class FontData extends DescParser {
         try {
             // Use GetResourcePath to handle resource folder prefix
             String aFilePath = Common.getResourcePath(theFontDescFileName);
-            aFileContent = java.nio.file.Files.readString(java.nio.file.Path.of(aFilePath));
+            // The legacy descriptor is a plain file next to the resources, not a pak member, so it has
+            // to be folded like every other resource path (upstream reaches it through fcaseopen as
+            // well): the retail directory is spelled `properties/`, and a descriptor named from the
+            // resource XML may differ in case from the file on disk.
+            java.nio.file.Path aResolved = cn.enaium.fabricpvz.portable.sexy.pak.PakSource
+                    .resolveCaseInsensitive(java.nio.file.Path.of(aFilePath));
+            if (aResolved == null) {
+                return false;
+            }
+            aFileContent = java.nio.file.Files.readString(aResolved);
         } catch (java.io.IOException e) {
             return false;
         }

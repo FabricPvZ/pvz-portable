@@ -161,6 +161,24 @@ public interface RendererBackend {
     /** Reads back a texture into {@code dest} ({@code width*height} pixels). */
     void readTexturePixels(long texture, int width, int height, int[] dest);
 
+    /**
+     * A frame's widget drawing through {@link #setRenderTarget(long) setRenderTarget(0)} has ended:
+     * present the canvas to the window (upstream {@code SexyAppFramework}'s {@code mScreenImage}, which
+     * {@code GLInterface} blits into the window at the end of {@code Redraw}).
+     *
+     * <p>Called once per frame by {@code WidgetManager.drawScreen}, after every widget (including the
+     * deferred overlays and a self-drawn cursor) has been drawn, and <em>before</em>
+     * {@link #present()}. Backends that scale their canvas at presentation time (a high-density window
+     * whose drawable is larger than the logical canvas) clear the window and blit the canvas into it
+     * here; backends that draw straight into the window do nothing, which is what this default does.
+     *
+     * <p>Implementations must leave the framework's {@code 0 = screen} binding in place afterwards (the
+     * next frame draws to the canvas again) and must not gate on dirty state: a frame that draws
+     * nothing still has to reach the window.
+     */
+    default void compositeToOutput() {
+    }
+
     /** Presents the rendered frame (no-op for offscreen targets). */
     void present();
 

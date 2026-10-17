@@ -32,7 +32,7 @@ reads the retail resources from a directory you point it at (or from your local 
 | JDK | **25** | Gradle toolchain pinned to 25, sources compiled with `--release 25` |
 | Gradle | **9.8.1** | pinned by the wrapper — `./gradlew` is enough, no preinstalled Gradle |
 | Platform bindings | **LWJGL 3.4.3**: `lwjgl-sdl` (SDL3), `lwjgl-opengl`, `lwjgl-openal`, `lwjgl-stb`, `lwjgl-nfd` | only LWJGL 3.4.x has SDL3 bindings (3.3.x publishes no `lwjgl-sdl`) |
-| Audio (optional) | `libopenmpt` | needed for MO3 music only. Without it music is disabled and sound effects work normally |
+| Audio (optional) | `libopenmpt` | needed for MO3 music only. The distribution ships the Windows build of it and the port looks there first; macOS/Linux use the installed/system copy. Without any copy music is disabled and sound effects work normally |
 | macOS | `-XstartOnFirstThread` | SDL needs the JVM's main thread to own the first thread; the `run`/test tasks add the switch themselves |
 | Kotlin | 2.4.21 | **mods only**: the mod toolchain compiles a Kotlin mod against this version, and a Kotlin mod needs the `fabric-language-kotlin` language module as the owner of `kotlin.*` at runtime. The game itself needs no Kotlin |
 
@@ -42,7 +42,7 @@ installed on the machine already.
 ## Build, test, run
 
 ```bash
-./gradlew build                      # compile + the whole test suite (1397 tests, 137 test classes)
+./gradlew build                      # compile + the whole test suite (1458 tests, 145 test classes)
 ./gradlew test                       # tests only
 ./gradlew test --tests 'cn.enaium.fabricpvz.portable.lawn.BoardTest'
 ./gradlew run                        # start the game on the real Fabric Loader (game dir: run/)
@@ -54,20 +54,24 @@ installed on the machine already.
 `-Dpvz.gameDir=<project>/run`, `-Dfabric.skipMcProvider=true`, `-Dfabric.development=true` and
 `--enable-native-access=ALL-UNNAMED` (plus `-XstartOnFirstThread` on macOS). `run/mods/` is where the
 loader reads mods from, exactly as in an installation; `run/.fabric/` is the loader's cache and
-`run/userdata/` holds save data. Since the API is a mod rather than a dependency, `run` first copies
-the built API jar into `run/mods/` (task `installApiMod`), so a development run sees the same set a
-player's installation does. `run` does not depend on the asset sync: to work from an explicit resource
-directory, name `syncDevResources` in the same invocation
+`run/userdata/` holds save data. `run` copies nothing into `run/mods/`: the mods a run loads are the
+jars you put there yourself, the API's `fabric-api-<version>.jar` among them, so a development run
+sees exactly the set a player's installation would. `run` does not depend on the asset sync: to work
+from an explicit resource directory, name `syncDevResources` in the same invocation
 (`./gradlew syncDevResources run -PpvzResDir=<dir>`), which copies only `main.pak` and
 `properties/**` into `run/`. Without it, the game finds its assets through the discovery chain below
 (your Steam installation, for instance).
 
 ### What the build needs from the other repositories
 
-The game resolves its launcher from `mavenLocal()` — `cn.enaium.fabricpvz:fabric-provider:1.0.0` is a
-`runtimeOnly` dependency — and it takes the mod API from a **sibling checkout** of the `fabric-api`
-repository (`../fabric-api/build/libs/`) rather than from a repository, because the API is a mod and
-not a dependency. So, from a fresh clone with the siblings checked out side by side:
+This project is standalone: every sibling artifact it consumes comes from `mavenLocal()` as a Maven
+coordinate, never from a sibling checkout's build directory. The launcher is
+`cn.enaium.fabricpvz:fabric-provider` (a `runtimeOnly` dependency, which publishes the real Fabric
+Loader with Mixin, ASM and the logging stack); the mod API is an ordinary published coordinate too —
+its five feature modules (`api-base`, `api-events`, `api-plant`, `api-resource`, `api-zombie`) are on
+the test *compile* class path only, and its aggregate jar (`fabric-api`) is what the loader end-to-end
+test finds in a real `mods/` directory (the version is `apiVersion` in `build.gradle.kts`, currently
+`1.2.0`). So, from a fresh clone with the siblings checked out side by side:
 
 ```bash
 # from the fabric-provider repository (publishes the launcher stack: Loader, Mixin, ASM, logging)
@@ -76,10 +80,11 @@ not a dependency. So, from a fresh clone with the siblings checked out side by s
 # this project, without tests, to put its POM in mavenLocal (the API compiles against this game)
 ./gradlew publishToMavenLocal -x test
 
-# from the fabric-api repository (its event types are typed against this game's classes; its build
-# resolves the mod Gradle plugin `cn.enaium.fabricpvz.loom` from the Gradle Plugin Portal, so the
-# plugin needs neither a checkout nor a local publication)
-./gradlew build
+# from the fabric-api repository: publishes the aggregate `fabric-api` jar and the five `api-*` modules
+# (its event types are typed against this game's classes; its build resolves the mod Gradle plugin
+# `cn.enaium.fabricpvz.loom` from the Gradle Plugin Portal, so the plugin needs neither a checkout nor
+# a local publication)
+./gradlew publishToMavenLocal
 
 # only the test suite needs this one: the loader end-to-end test loads its jar into a real mods/
 # directory
@@ -90,8 +95,15 @@ not a dependency. So, from a fresh clone with the siblings checked out side by s
 ./gradlew build
 ```
 
-The build does not fail silently when the API is missing: `checkApiBuilt` stops with the command that
-builds it. Compiling the ported game itself needs only the provider.
+After changing the API, publish it again before running this project's tests:
+
+```bash
+(cd ../fabric-api && ./gradlew publishToMavenLocal)
+cd ../PvZ-Portable && ./gradlew test
+```
+
+Compiling the ported game itself needs only the provider; a missing or stale API publication shows up
+as an unresolved dependency, or as a test that does not match the API's working tree.
 
 ## Game assets (user-provided)
 
@@ -135,6 +147,26 @@ pvz-portable-1.0.0/
 
 The zip contains no `mods/` directory — that is the one thing you add.
 
+**Native libraries (`lib/native/`).** `lib/` also carries the native libraries the game loads itself,
+one directory per platform: `lib/native/<os>-<arch>/` holds `libopenmpt.dll` for `windows-x64` and
+`windows-arm64` — the Windows builds are the only compiled libopenmpt binaries upstream publishes
+(its download page points every other system at its distribution packages) — plus the codec DLLs the
+library is linked against (`openmpt-ogg`, `openmpt-mpg123`, `openmpt-vorbis`, `openmpt-zlib`), the
+licence as `lib/native/libopenmpt-LICENSE.txt`, and `lib/native/libopenmpt-natives.txt`, the record of
+the release archive the files come from with their sha256 sums. The build downloads that archive once,
+verifies its sha256, and stages it (`./gradlew libopenmptNatives`): a build without network and
+without the cache in the Gradle user home (`caches/pvz/libopenmpt`) fails and says which URL to fetch
+instead of producing a zip without them; once cached, `--offline` builds work.
+
+The port looks there **first** and falls back to the system library, so on macOS and Linux it keeps
+using the copy your package manager installed (`brew install libopenmpt`, `apt install libopenmpt0`,
+…); a `libopenmpt.dylib`/`libopenmpt.so` you build yourself also wins when you drop it into
+`<game directory>/lib/native/<os>-<arch>/` (or `<game directory>/native/<os>-<arch>/`). Without any
+copy the game plays everything except the two MO3 music files — the sound effects and every `.ogg`
+track are decoded in Java — and logs one `Music disabled: libopenmpt is not available` line. When a
+copy does load, one INFO line reports the path and the version:
+`Music: libopenmpt 0.8.9 loaded from …/lib/native/windows-arm64/libopenmpt.dll`.
+
 **Installing mods.** The zip ships no `mods/` directory and no mod jar, because a mod is something the
 player installs. Fabric Loader reads `mods/` from the game directory it is launched on, and for an
 unpacked distribution that game directory is the unpacked root — the directory holding `bin/` and
@@ -173,6 +205,90 @@ The zip is also what **mod builds compile against**: a mod project's `pvz(...)` 
 this game, takes the release asset `pvz-portable-<version>.zip` of that version and puts its `lib/`
 on the mod's compile/test/run class path. Changing what goes into `lib/` therefore changes what mods
 link against — see the `loom` repository for the toolchain itself.
+
+### On Windows
+
+The Steam installation is found by itself (`steamapps/libraryfolders.vdf` → every library folder), so
+the retail `Plants Vs Zombies` directory — including the Steam build's `.au` sounds — needs no wrapper
+directory and no converted assets. Verified on Windows 11 ARM64 with a Liberica JDK 25 and the real
+Steam assets (docs/VERIFICATION.md §59).
+
+**Rendering backend.** The SDL default renderer can take the JVM down inside `SDL_CreateRenderer`
+(`EXCEPTION_ACCESS_VIOLATION`) on some Windows setups — the launcher then has no `RENDERER:` line and
+no window content. Ask for the software backend instead:
+
+```bat
+set PVZ_PORTABLE_OPTS=-Dpvz.renderer=software
+bin\pvz-portable.bat
+```
+
+A missing `RENDERER:` line means the requested GPU backend failed and the port fell back to its
+offscreen software renderer, so if the picture looks wrong, check the log line first.
+
+**Music.** The MO3 tracks need libopenmpt, and the Windows build of it travels inside the distribution
+(`lib/native/windows-x64` / `windows-arm64`, see "The distribution" above), so nothing has to be
+installed. The system copy is still the fallback on every platform: `libopenmpt.dll` on `PATH` or in
+`C:\Program Files\libopenmpt\`, Homebrew's on macOS, the distribution package on Linux. Without any
+copy the log says `Music disabled: libopenmpt is not available` and `music failed to load` twice. Both
+are non-fatal: the game runs, only the music is silent.
+
+**Sounds.** WAV, Ogg Vorbis, MO3 and AU (µ-law, the Sun/NeXT format the Steam assets use) are decoded
+from their content, not their file name. A sound whose container nothing can decode is logged
+(`Skipping sound '…': unrecognized audio container in …`) and skipped, while a sound that is missing
+from the pak/properties/data files still fails the loading thread — so a broken manifest is not
+hidden by the skip.
+
+### On Linux
+
+Verified on Fedora 44 Server (aarch64, OpenJDK 25) with Wayland and with X11: the window dump, both mod
+harnesses, a played level, the Steam asset discovery and the MO3 music all match the macOS numbers
+(docs/VERIFICATION.md §62).
+
+**Display.** SDL3 needs a display server, and an SSH login has neither `DISPLAY` nor
+`WAYLAND_DISPLAY` set. Both routes work — Wayland through the session's runtime directory:
+
+```bash
+XDG_RUNTIME_DIR=/run/user/$(id -u) WAYLAND_DISPLAY=wayland-0 SDL_VIDEODRIVER=wayland bin/pvz-portable
+```
+
+and X11/Xwayland, which needs the session's own authorization file: a bare `DISPLAY=:0` fails with
+`Authorization required, but no authorization protocol specified` (and then `SDL_Init(SDL_INIT_VIDEO)
+failed: x11 not available`), because an SSH environment has no `~/.Xauthority`:
+
+```bash
+DISPLAY=:0 XAUTHORITY=/run/user/$(id -u)/.mutter-Xwaylandauth.XXXXXX SDL_VIDEODRIVER=x11 bin/pvz-portable
+```
+
+`Failed to load plugin 'libdecor-gtk.so': failed to init` is SDL's Wayland client-decoration plugin
+(libdecor + GTK3) missing on a Server install; SDL falls back to server-side or undecorated windows and
+the window works normally, so the line is environment, not a defect.
+
+**Rendering backend.** The default (`opengl`) works even on a machine without a GPU — the VM runs it
+through Mesa's llvmpipe — and `-Dpvz.renderer=software` works as well. Both draw the same picture; the
+software backend used to lose a race with the window manager's first resize, which is fixed and
+explained in docs/VERIFICATION.md §62.
+
+**Native library directory.** The directory name is the one `OpenMptLibrary.nativePlatform()` produces:
+`linux-x64` and `linux-arm64`. The architecture is normalized, so `aarch64` maps to `arm64` — a
+`lib/native/linux-aarch64/` directory is **not** found.
+
+**Music (libopenmpt).** A distribution package is found by itself now (`dnf install libopenmpt` on
+Fedora/RHEL installs `/usr/lib64/libopenmpt.so.0`, `apt install libopenmpt0` the multiarch
+`/usr/lib/<triplet>/libopenmpt.so.0`), and a copy in the game directory still wins. Without root, the
+same library can be unpacked into the distribution's own native directory:
+
+```bash
+mkdir -p ~/libopenmpt && cd ~/libopenmpt
+curl -sSLO https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Everything/aarch64/os/Packages/l/libopenmpt-0.8.6-1.fc44.aarch64.rpm
+rpm2cpio libopenmpt-0.8.6-1.fc44.aarch64.rpm | cpio -idmv        # → usr/lib64/libopenmpt.so.0.5.5
+mkdir -p ~/pvz/lib/native/linux-arm64
+cp -L usr/lib64/libopenmpt.so.0.5.5 ~/pvz/lib/native/linux-arm64/libopenmpt.so
+```
+
+Its dependencies (`libz`, `libmpg123`, `libogg`, `libvorbis`, `libstdc++`) come from the base system.
+Verified: `Music: libopenmpt 0.8.6 loaded from …/lib/native/linux-arm64/libopenmpt.so`, and both MO3
+tracks decode to the same PCM as macOS and Windows (MAINMUSIC: 8,373,498 frames, 0.9994 non-zero
+samples, peak 14462).
 
 ### Releases
 
@@ -221,7 +337,7 @@ configuration, dropped into the game directory's `mods/`.
 ```
 
 - **Mod ids.** The game is `pvz-portable`; the API is `fabric-api` (its feature modules `api-base`,
-  `api-events`, `api-plant`, `api-zombie` are nested inside that one jar). A mod that wants the API
+  `api-events`, `api-plant`, `api-resource`, `api-zombie` are nested inside that one jar). A mod that wants the API
   declares `"fabric-api": ">=1.0.0"`, and `"pvz-portable": "*"` for the game — the game's version is
   not something a mod has to follow.
 - **Entry points** are Fabric's own interfaces (`net.fabricmc.api.ModInitializer`,
@@ -231,6 +347,16 @@ configuration, dropped into the game directory's `mods/`.
 - **Mixin** is the real Sponge Mixin that ships with Fabric Loader (`@Mixin/@Inject/@Redirect/
   @Overwrite/@Shadow/@Accessor/@Invoker`). The port runs without mappings, so mixin references are used
   verbatim and no refmap is needed.
+- **Content** (custom plants and zombies) comes from `api-plant`/`api-zombie`, and a mod's own art
+  (its seed-packet icon, a recoloured retail plant) from `api-resource`: registering a definition
+  writes a row into this game's capacity-sized definition tables (`SeedType.MAX_SEED_TYPES`,
+  `ZombieType.MAX_ZOMBIE_TYPES`; an empty row means "not registered") and the API's Mixins dispatch the
+  definition's behaviour into the game's own methods — the game has no registry and no mod concept of
+  its own. Both the seed chooser and the Almanac show registered content on a page after the vanilla
+  grid (page 0): a registered seed the player has unlocked joins the chooser's later pages, and the
+  Almanac's plant page gets the same kind of later page (its zombie page gets one for every defined
+  zombie above the retail range), where the entry's card shows the name and the description the
+  registration carries.
 - **Events** come from the API: `cn.enaium.fabricpvz.api.lawn.LawnEvents` (level start/end, waves,
   zombie spawn/death/hurt, plant placed/removed/hurt, sun collected, planting validation, every tick,
   before/after draw), `cn.enaium.fabricpvz.api.PvzFabricApi` and
@@ -241,7 +367,8 @@ configuration, dropped into the game directory's `mods/`.
   class path is discovered when the loader runs in development mode
   (`-Dfabric.development=true`, which `./gradlew run` passes) — that is how a mod's own `runClient`
   works. The API in particular is a `mods/` jar in every case, never a class path entry: during
-  development `installApiMod` puts it into `run/mods/`.
+  development you copy `fabric-api-<version>.jar` into `run/mods/` yourself — the build installs
+  nothing there.
 
 Building a mod is one plugin line (`id("cn.enaium.fabricpvz.loom")` plus its version), published on the
 Gradle Plugin Portal by the `loom` repository; the toolchain brings the loader, Mixin, ASM, the API and
@@ -285,7 +412,7 @@ mid-level save format (below).
 | Game: Cheat dialog and level jump | Done | `CheatDialogTest` 18 + `LawnAppCheatTest` 8 (including the `sscanf` syntax family and the invalid-input branches) |
 | Game: mid-level saves (`.v4`) | Done | 19 `SaveGameTest` tests: in-progress level round-trip, byte-identical rewrite after reading, CRC/version rejection |
 | Game: legacy `.dat` mid-level saves | N/A | Upstream README: `.dat` is "raw memory dumps … Do not share this file across platforms"; the port recognizes them by the upstream criterion and gives an actionable hint (open with the upstream version to auto-migrate to `.v4`) without faking a decoder |
-| Fabric Loader integration (game provider + API + a real `mods/` directory) | Done | `FabricLoaderEndToEndTest` launches Fabric Loader 0.19.5 in a second JVM with the API jar, the example mod and a fixture mod as the only three jars of a real `mods/` directory — the API is on the class path in neither mode the test runs — and verifies the resolved mod list (game, loader, the API's four modules nested in its aggregate jar, all three mod jars), a mod Mixin applied to game classes, the API's hook chain reaching a mod listener, the fixture's plant and zombie registrations on a real board, and the game booting Adventure level 1 to `SCENE_PLAYING` (300 ticks with the mod's board Mixin running) |
+| Fabric Loader integration (game provider + API + a real `mods/` directory) | Done | `FabricLoaderEndToEndTest` launches Fabric Loader 0.19.5 in a second JVM with the API jar, the example mod and a fixture mod as the only three jars of a real `mods/` directory — the API is on the class path in neither mode the test runs — and verifies the resolved mod list (game, loader, the API's five modules nested in its aggregate jar, all three mod jars), a mod Mixin applied to game classes, the API's hook chain reaching a mod listener, the fixture's plant and zombie registrations on a real board, and the game booting Adventure level 1 to `SCENE_PLAYING` (300 ticks with the mod's board Mixin running) |
 | Distribution / release (the `application` plugin's zip) | Done | `./gradlew distZip` → `pvz-portable-1.0.0.zip` (`bin/` + `lib/` only, ~25 MB) with the 36 LWJGL natives jars and no `mods/` directory; verified outside the repository: unpacked in `/tmp`, `mods/` created next to `bin/`, mod jars copied in, `./bin/pvz-portable` started from an unrelated working directory → Fabric Loader resolves the mods and the game reaches `SCENE_PLAYING` |
 
 ## Differences from upstream (deviation log)
@@ -298,10 +425,14 @@ mid-level save format (below).
 | Registry persistence | regemu (`mRegKey` is empty under real assets, so it has no effect) | same (the RegEmu implementation is retained) | consistent with upstream behaviour |
 | Compile cache | `cache64/` binary cache | retained, reading and writing the same cache format | see the asset/resource research notes |
 | Mixin | Sponge Mixin 0.8 | **the Sponge Mixin build that ships with the real Fabric Loader**, configured by `fabric.mod.json` `mixins` entries | no bespoke engine to maintain; mods use the standard Mixin API and config format |
+| Seed chooser | one grid of the retail seeds | **page 0 is that grid**; seed types the player has unlocked beyond the retail range (id ≥ `SeedType.NUM_SEEDS_IN_CHOOSER`, i.e. content a mod registered) get further pages, up to `SeedChooserScreen.CHOOSER_PAGE_SIZE` (48) per page in id order, with prev/next arrows beside "Let's Rock" | mod content needs somewhere to go in the chooser without disturbing the retail layout; with one page nothing beyond the grid is drawn or clickable, so the unmodded chooser is exactly upstream's |
+| Almanac | one fixed plant grid and one fixed zombie grid | **page 0 is each of those grids**; the plant page gets further pages for registered seed types the player has unlocked (id ≥ `SeedType.NUM_SEEDS_IN_CHOOSER`, `AlmanacDialog.ALMANAC_PLANT_PAGE_SIZE` = 48 per page in id order) and the zombie page gets them for defined zombie types above the retail range (id ≥ `ZombieType.NUM_ZOMBIE_TYPES`, 25 per page), with prev/next arrows and a `page/total` counter in the free stretch of the bottom button row | same rule as the chooser, and the game side stays neutral: names and descriptions go through the almanac's own `AlmanacDialog.getPlantDescriptionText` / `getZombieNameText` / `getZombieDescriptionText` seams, which `api-plant`/`api-zombie` inject for registered content; a single page draws no arrows and no counter, so the unmodded almanac is exactly upstream's |
+| Cached plant frame | `ReanimatorCache::MakeCachedPlantFrame` draws the separate `anim_head_idle` layer for a written-out list of seed types | the rule is read from the plant's reanimation (`anim_head_idle` exists ⇒ draw that layer), which is what the list stood for | the frame is what the cursor preview, the seed packet art and the almanac picture show, and the retail list left a plant registered with the same reanimation headless in all three; the retail set is unchanged (only the five pea shooters' reanimations carry that layer) |
+| Window and presentation | window created with `SDL_WINDOW_OPENGL \| SDL_WINDOW_RESIZABLE` (no high-DPI flag); every primitive is drawn straight into the window and scaled by SDL's logical presentation, and the window server stretches an 800x600 frame on a Retina display | the window requests `SDL_WINDOW_HIGH_PIXEL_DENSITY`; a frame is drawn 1:1 into an 800x600 offscreen **canvas** and the renderer composites that canvas into the drawable once per frame (upstream's `mScreenImage` architecture), filtering whole-number magnifications nearest and everything else linearly | the user asked for the SDL window's high-pixel mode; scaling every primitive distorts rotated/skewed quads and, at a fractional scale, copies some source pixels twice and others not at all (uneven text strokes) — see `docs/VERIFICATION.md` §52. A deliberate deviation from upstream, not a porting shortcut |
 
 ## Development tasks
 
-The suite is JUnit 6.1.3 (`useJUnitPlatform()`), 1397 tests in 137 test classes. Every test gets a
+The suite is JUnit 6.1.3 (`useJUnitPlatform()`), 1458 tests in 145 test classes. Every test gets a
 180-second wall-clock budget in `SEPARATE_THREAD` mode, so a stuck loop fails one test instead of
 hanging the build; the test JVM runs headless (`SDL_VIDEODRIVER=dummy` with the software renderer) and
 adds `-XstartOnFirstThread` on macOS. Tests that need real assets take them through
@@ -319,7 +450,7 @@ as Gradle properties (`-P…`):
 
 | Task | Purpose |
 |---|---|
-| `./gradlew dumpWindow` | opens a real window and writes its contents to `build/window-dump/frame-NNN.png` every 0.5 s; `-Ppvz.renderer=software\|metal\|opengl\|…` selects the backend, `-Ppvz.window.dumpDir=…` the output directory |
+| `./gradlew dumpWindow` | opens a real window and writes both images of every frame (0.5 s apart) to `build/window-dump/`: `frame-NNN.png` is the 800x600 canvas the game drew into, `window-NNN.png` what the window shows (the canvas composited into the drawable); each frame prints `appLogical=`/`canvas=`/`window=`/`present=`; `-Ppvz.renderer=software\|metal\|opengl\|…` selects the backend, `-Ppvz.window.dumpDir=…` the output directory |
 | `./gradlew sceneDump` | frames of one rendering scenario, for looking at a specific animation frame by frame; `-Ppvz.dump.scenario=graveRise\|fume\|packet\|zomboni` |
 | `./gradlew zoomDump` | the frames around the level-award seed packet being picked up (scaled up to 2×), plus a probe for the zoomed drawing's filtering; `-Ppvz.zoom.dumpDir/resDir/logClicks` |
 | `./gradlew playthrough` | plays Adventure mode end to end from the menu using **synthetic SDL events** through the real input path; `-Ppvz.play.firstLevel/lastLevel/firstMode/lastMode/tickBudget/fast/fromMenu/logClicks` |
@@ -336,11 +467,16 @@ Three hard rules when writing such a driver (they are also documented in the dri
 
 Two more things worth knowing before changing rendering code:
 
-- **Logical vs drawable size.** The port distinguishes the logical window size (used for app layout,
-  e.g. 800×600) from the drawable size (used for rendering, 1600×1200 on Retina). The `WINDOW_RESIZE`
-  event carries only the logical size and render scaling is driven by
-  `RendererBackend.renderOutputWidth/Height`; feeding the drawable size back in as the window size
-  stretches the canvas and the window appears to show nothing.
+- **Logical vs drawable size, and the canvas.** The port distinguishes the logical window size (used for app
+  layout, e.g. 800×600) from the drawable size (used for rendering, 2940×1790 pixels for a 1470×895-point
+  window on a Retina display). The `WINDOW_RESIZE` event carries only the logical size; feeding the drawable
+  size back in as the window size stretches the canvas and the window appears to show nothing. Rendering goes
+  the other way: the framework draws every frame 1:1 into an 800×600 **canvas** (an offscreen texture created
+  only when the drawable differs from the canvas) and `RendererBackend.compositeToOutput()`, called at the end
+  of `WidgetManager.drawScreen`, scales it into the drawable once (`SdlRenderer`). `renderOutputWidth/Height`
+  is the canvas, `presentedWidth/Height` the drawable, `readTexturePixels(0, ..)` reads the canvas and
+  `readPresentedPixels(..)` the window, and `logicalPresentationRect()` is in window **points** (mouse space).
+  On a window whose drawable equals the canvas none of this happens and the window is drawn into directly.
 - **Provenance markers.** Every ported type/method records its upstream origin in the javadoc —
   `Ported from src/Lawn/Board.cpp:246 (BoardInitForPlayer)` — with the `src/...:<line>` kept in step
   with the upstream source (355 of 375 files in `src/main`, about 2358 markers in total). Deviations
@@ -360,7 +496,13 @@ Two more things worth knowing before changing rendering code:
   [Game assets](#game-assets-user-provided)).
 - Third-party dependencies: LWJGL (BSD-3), Fabric Loader (Apache-2.0), Sponge Mixin (MIT), ASM (BSD-3),
   Gson (Apache-2.0), Kotlin (Apache-2.0 — the mod toolchain's Kotlin plugin, and the standard library
-  that the `fabric-language-kotlin` mod provides to Kotlin mods), JUnit (EPL-2.0, tests only).
+  that the `fabric-language-kotlin` mod provides to Kotlin mods), JUnit (EPL-2.0, tests only), and
+  **libopenmpt 0.8.9 (BSD-3-Clause)** — the optional MO3 decoder, whose Windows build the distribution
+  ships in `lib/native/` with upstream's `LICENSE.txt` as `lib/native/libopenmpt-LICENSE.txt`. The four
+  codec DLLs next to it are upstream's own builds of, and carry the licences of, libmpg123 (LGPL-2.1),
+  libogg and libvorbis (BSD-3) and zlib; upstream lists those texts in the `Licenses/` directory of its
+  binary distribution (`lib.openmpt.org/files/libopenmpt/bin/`), which is not the archive this build
+  pins — the file-by-file provenance is in `lib/native/libopenmpt-natives.txt`.
 
 ## Related projects
 
@@ -370,10 +512,9 @@ part of its build:
 | Repository | What it is, and how this project relates to it |
 |---|---|
 | `fabric-provider` | the Fabric Loader game provider: finds the game (`GameProvider`), unlocks the class-loading path so Mixin can rewrite game classes, runs mod entry points, then calls the game's main class. It publishes the launch libraries — the real Fabric Loader, Mixin, ASM, and the SLF4J + Log4j stack — which is why this project depends on it as its single `runtimeOnly` launcher dependency and why `lib/` of the distribution is what it is |
-| `fabric-api` | the mod API: `api-base` (event bus + API entrypoints), `api-events` (lawn and lifecycle events), `api-plant` and `api-zombie` (content registration). Its event types are typed against this game's classes, and it is installed into `mods/` as the one aggregate mod jar `fabric-api` — never a class path dependency |
+| `fabric-api` | the mod API: `api-base` (event bus + API entrypoints), `api-events` (lawn and lifecycle events), `api-plant` and `api-zombie` (content registration, plus the Mixins that dispatch a registered definition's behaviour into this game's methods), `api-resource` (a mod's own images: slots the game never draws, the game's own packet/cached-frame painters, per-track reanimation overrides, with its own entrypoint and Mixin). Its event types and Mixins are typed against this game's classes, and it is installed into `mods/` as the one aggregate mod jar `fabric-api` — never a class path dependency |
 | `loom` | the mod Gradle plugin `cn.enaium.fabricpvz.loom`, published on the Gradle Plugin Portal: one plugin line gives a mod the loader, Mixin, ASM, the API and **this game** as a distribution, plus a `runClient` task that boots the game through the real loader |
 | `pvz-example-mod` | reference mod: API events, mod hooks and a Mixin into the game. This project's loader end-to-end test loads its jar from `mavenLocal` |
-| `pvz-content-mod` | content mod: custom plants and a custom zombie registered through the API (the end-to-end content fixture) |
 | `speed-mod` | game-speed controls (0.5×–3× and pause) as buttons next to the menu button |
 | `auto-collect-mod` | collects sun and coins for the player, with a toggle button |
 

@@ -14,8 +14,6 @@ package cn.enaium.fabricpvz.portable.lawn;
 import java.util.ArrayList;
 import java.util.List;
 
-import cn.enaium.fabricpvz.portable.lawn.content.CustomPlantType;
-import cn.enaium.fabricpvz.portable.lawn.content.PlantTypeRegistry;
 import cn.enaium.fabricpvz.portable.lawn.system.PlayerInfo;
 import cn.enaium.fabricpvz.portable.lawn.widget.ChallengeScreen;
 import cn.enaium.fabricpvz.portable.lawn.widget.GameOverDialog;
@@ -340,15 +338,11 @@ public class CutScene {
             }
         }
 
-        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.NUM_SEED_TYPES; aSeedType++) {
-            if (mApp.hasSeedType(aSeedType)) {
-                Plant.preloadPlantResources(aSeedType);
+        for (int aSeedType = SeedType.SEED_PEASHOOTER; aSeedType < SeedType.MAX_SEED_TYPES; aSeedType++) {
+            if (Plant.gPlantDefs[aSeedType] == null || !mApp.hasSeedType(aSeedType)) {
+                continue;
             }
-        }
-
-        // Mod plants have no unlock state, so they are always preloaded.
-        for (CustomPlantType aCustom : PlantTypeRegistry.all()) {
-            Plant.preloadPlantResources(aCustom.mSeedType);
+            Plant.preloadPlantResources(aSeedType);
         }
 
         if (mApp.isFirstTimeAdventureMode() && mBoard.mLevel <= 50) {

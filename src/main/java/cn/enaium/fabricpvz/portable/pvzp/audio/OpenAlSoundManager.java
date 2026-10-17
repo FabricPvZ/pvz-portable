@@ -1,8 +1,10 @@
 package cn.enaium.fabricpvz.portable.pvzp.audio;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.lwjgl.openal.AL10;
+import cn.enaium.fabricpvz.portable.sexy.Common;
 import cn.enaium.fabricpvz.portable.sexy.pak.PakInterface;
 import cn.enaium.fabricpvz.portable.sexy.sound.SoundInstance;
 import cn.enaium.fabricpvz.portable.sexy.sound.SoundManager;
@@ -24,6 +26,11 @@ import cn.enaium.fabricpvz.portable.sexy.sound.SoundManager;
  *       without decoding and {@code GetSoundInstance} returns {@code null}
  *       (SDLSoundManager.cpp:255-256, :372-381) — sounds silently do nothing while decoding still
  *       works.</li>
+ *   <li>An asset that exists but cannot be decoded (no known container, or its decoder rejects it)
+ *       is logged and skipped: {@code LoadSound(id, name)} reports success and the slot keeps a
+ *       {@code null} buffer, which is the same state the uninitialized-mixer case leaves behind. An
+ *       asset that is not in the pak/files at all still returns {@code false}, so a resource the
+ *       manifest names but nobody ships keeps failing the loading thread (docs/VERIFICATION.md §59).</li>
  *   <li>{@code LoadSound(name)} reuses the id whose file name matches, otherwise it scans
  *       <em>from the top of the array down</em> ({@code for (i = MAX_SOURCE_SOUNDS-1; i >= 0; i--)})
  *       for a free slot; {@code GetFreeSoundId} scans <em>forward</em>.</li>
@@ -148,19 +155,36 @@ public final class OpenAlSoundManager implements SoundManager, AutoCloseable {
 
         mSourceFileNames[(int) theSfxID] = theFilename;
 
-        SoundBuffer buffer = decode(theFilename);
-        mSourceSounds[(int) theSfxID] = buffer;
-        return buffer != null;
+        List<AudioAssets.Loaded> candidates = readCandidates(theFilename);
+        if (candidates.isEmpty()) {
+            // Not a single probe candidate exists: a genuinely missing resource, which has to fail
+            // like every other unresolvable resource (ResourceManager.doLoadSound).
+            return false;
+        }
+
+        // The asset is there, so a container this port cannot decode is skipped (with a log line)
+        // instead of aborting the loading thread — same treatment music already gets
+        // (Music.loadSong logs "music failed to load" and carries on). See docs/VERIFICATION.md §59.
+        mSourceSounds[(int) theSfxID] = decode(theFilename, candidates);
+        return true;
     }
 
     /** Upstream {@code SDLSoundManager::DecodeSound} (SDLSoundManager.cpp:281-305). */
-    private SoundBuffer decode(String theFilename) {
-        for (AudioAssets.Loaded loaded : readCandidates(theFilename)) {
+    private SoundBuffer decode(String theFilename, List<AudioAssets.Loaded> theCandidates) {
+        for (AudioAssets.Loaded loaded : theCandidates) {
+            if (loaded.format() == AudioFormat.UNKNOWN) {
+                Common.logWarnLn("Skipping sound '{}': unrecognized audio container in {}", theFilename,
+                        loaded.name());
+                continue;
+            }
+
             PcmSound pcm;
             try {
                 pcm = loaded.format().decodeSound(loaded.data());
             } catch (IOException e) {
                 // Upstream keeps probing the next format when Mix_LoadWAV_RW fails.
+                Common.logWarnLn("Skipping sound '{}': {} decoder rejected {} ({})", theFilename,
+                        loaded.format(), loaded.name(), e.getMessage());
                 continue;
             }
 
@@ -177,11 +201,11 @@ public final class OpenAlSoundManager implements SoundManager, AutoCloseable {
         return null;
     }
 
-    private java.util.List<AudioAssets.Loaded> readCandidates(String theFilename) {
+    private List<AudioAssets.Loaded> readCandidates(String theFilename) {
         try {
             return AudioAssets.readAll(mPakInterface, theFilename);
         } catch (IOException e) {
-            return java.util.List.of();
+            return List.of();
         }
     }
 

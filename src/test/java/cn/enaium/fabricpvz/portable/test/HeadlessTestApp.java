@@ -36,6 +36,21 @@ public final class HeadlessTestApp {
     private HeadlessTestApp() {
     }
 
+    /** Temp folder the headless fixtures keep their definition caches in; created on first use. */
+    private static String sHeadlessAppDataFolder;
+
+    private static synchronized String headlessAppDataFolder() {
+        if (sHeadlessAppDataFolder == null) {
+            try {
+                sHeadlessAppDataFolder =
+                        java.nio.file.Files.createTempDirectory("pvz-headless-appdata").toString();
+            } catch (java.io.IOException e) {
+                throw new IllegalStateException("cannot create the headless app-data folder", e);
+            }
+        }
+        return sHeadlessAppDataFolder;
+    }
+
     /**
      * Gives a headless {@link LawnApp} everything {@code LawnApp::Init()} and the loading thread
      * would normally create: a profile, the effect system, the audio facades and the process-wide
@@ -48,6 +63,14 @@ public final class HeadlessTestApp {
         // fail. Tests that boot the real game call Main.installHooks() themselves; keeping this null
         // also makes test order irrelevant (the field is static).
         cn.enaium.fabricpvz.portable.pvzp.PvzpResourceManager.gExtractResourcesByName = null;
+
+        // The definition engine caches compiled definitions under the app-data folder, and a headless
+        // app never sets one: without this it would be the process' working directory, i.e. the project,
+        // where the dump tasks and the real-asset tests leave a cache64/ behind. A later asset-less test
+        // then reads those caches and gets definitions its own resource layer cannot complete
+        // (docs/VERIFICATION.md §48.2). One temporary folder per process keeps every headless run
+        // hermetic; tests that want their own folder still set one and restore this one.
+        cn.enaium.fabricpvz.portable.sexy.Common.setAppDataFolder(headlessAppDataFolder());
 
         LawnApp.gLawnApp = theApp;
         if (theApp.mZenGarden == null) {
@@ -64,6 +87,12 @@ public final class HeadlessTestApp {
         if (theApp.mEffectSystem == null) {
             theApp.mEffectSystem = new cn.enaium.fabricpvz.portable.pvzp.fx.EffectSystem();
             theApp.mEffectSystem.effectSystemInitialize();
+        }
+        if (theApp.mReanimatorCache == null) {
+            // LawnApp::Init creates it (LawnApp.cpp:1178-1179): the cached seed/mower/zombie frames
+            // the seed packets, the almanac and the cursor preview draw from.
+            theApp.mReanimatorCache = new cn.enaium.fabricpvz.portable.lawn.system.ReanimatorCache();
+            theApp.mReanimatorCache.reanimatorCacheInitialize();
         }
         if (theApp.mMusicInterface == null) {
             // Headless runs must not open an audio device; the dummy interface records calls only.

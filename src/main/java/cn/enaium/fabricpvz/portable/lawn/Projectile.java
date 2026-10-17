@@ -133,7 +133,15 @@ public class Projectile extends GameObject {
                 break;
             }
             case ProjectileType.PROJECTILE_FIREBALL:
-                break;  // upstream PVZP_ASSERT(false): never constructed directly
+                // PORT-NOTE: upstream PVZP_ASSERT(false) here - a fireball is only ever produced by
+                // Projectile::ConvertToFireball (Projectile.cpp:1197-1219), and that is what attaches
+                // its flame reanimation (a directly constructed one would draw its shadow and no pea).
+                // Upstream's assert records that no game code constructs one directly; this port lets
+                // content fire any projectile type (Plant::Fire reaches here through the mod API), so a
+                // directly created fireball gets the same body and foley the conversion gives it.
+                attachFirePeaReanim();
+                mApp.playFoley(FoleyType.FOLEY_FIREPEA);
+                break;
             case ProjectileType.PROJECTILE_COBBIG:
                 mWidth = mApp.getImage(Resources.IMAGE_REANIM_COBCANNON_COB_ID).getWidth();
                 mHeight = mApp.getImage(Resources.IMAGE_REANIM_COBCANNON_COB_ID).getHeight();
@@ -1063,7 +1071,16 @@ public class Projectile extends GameObject {
         mProjectileType = ProjectileType.PROJECTILE_FIREBALL;
         mHitTorchwoodGridX = theGridX;
         mApp.playFoley(FoleyType.FOLEY_FIREPEA);
+        attachFirePeaReanim();
+    }
 
+    /**
+     * Attaches the flame body of a fireball (Projectile.cpp:1205-1216): the {@code REANIM_FIRE_PEA}
+     * reanimation, looping, at the projectile's own position. Both the torchwood conversion and a
+     * directly created fireball ({@link #projectileInitialize}) go through here, so the two look the
+     * same.
+     */
+    private void attachFirePeaReanim() {
         float aOffsetX = -25.0f;
         float aOffsetY = -25.0f;
         Reanimation aFirePeaReanim = mApp.addReanimation(0.0f, 0.0f, 0, ReanimationType.REANIM_FIRE_PEA);

@@ -44,7 +44,6 @@ public final class ContentMod implements ModInitializer {
         peaPlus = PlantType.builder("fixture_peashooter_plus")
                 .name("Fixture Pea Shooter+")
                 .tooltip("A test plant that fires two peas.")
-                .almanacDescription("Registered by the content fixture mod.")
                 .cost(125)
                 .refreshTime(750)
                 .reanimation(ReanimationType.REANIM_REPEATER)
@@ -61,7 +60,6 @@ public final class ContentMod implements ModInitializer {
 
         bucketRunner = ZombieType.builder("fixture_bucket_runner")
                 .name("Fixture Bucket Runner")
-                .almanacDescription("Registered by the content fixture mod.")
                 .bodyReanimation(ReanimationType.REANIM_ZOMBIE)
                 .health(400)
                 .helm(HelmType.HELMTYPE_PAIL, 1100)

@@ -1,5 +1,6 @@
 package cn.enaium.fabricpvz.portable.pvzp.audio;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -17,6 +18,13 @@ class AudioFormatTest {
         assertEquals(AudioFormat.WAV, AudioFormat.sniff(TestAudio.wavTone(22050, 1, 8)));
         assertEquals(AudioFormat.OGG, AudioFormat.sniff(oggHeader()));
         assertEquals(AudioFormat.MO3, AudioFormat.sniff(mo3Header()));
+    }
+
+    @Test
+    void recognizesTheSunAuContainerUsedByTheSteamAssets() {
+        // ".snd" == the big-endian magic 0x2e736e64 that upstream's LoadAUSound reads.
+        assertEquals(AudioFormat.AU, AudioFormat.sniff(TestAudio.auUlaw(8012, 1, new byte[] {(byte) 0xFF})));
+        assertEquals(AudioFormat.UNKNOWN, AudioFormat.sniff(ascii("snd-xxxxxxxx")));
     }
 
     @Test
@@ -50,6 +58,25 @@ class AudioFormatTest {
             short[] buffer = new short[64];
             assertEquals(64, stream.read(buffer, 64));
             assertEquals(0, stream.read(buffer, 64));
+        } finally {
+            stream.close();
+        }
+    }
+
+    @Test
+    void auDispatchesToTheUlawDecoderAndToTheStreamingView() throws IOException {
+        byte[] payload = TestAudio.auUlaw(8012, 1, new byte[] {(byte) 0xFF, 0x7F, (byte) 0xFE});
+
+        PcmSound sound = AudioFormat.AU.decodeSound(payload);
+        assertEquals(8012, sound.sampleRate());
+        assertEquals(3, sound.frameCount());
+
+        AudioStream stream = AudioFormat.AU.openStream(payload);
+        try {
+            assertEquals(1, stream.channels());
+            short[] buffer = new short[3];
+            assertEquals(3, stream.read(buffer, 3));
+            assertArrayEquals(new short[] {0, 0, 8}, buffer);
         } finally {
             stream.close();
         }

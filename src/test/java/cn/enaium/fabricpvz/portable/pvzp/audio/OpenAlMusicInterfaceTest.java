@@ -180,7 +180,12 @@ class OpenAlMusicInterfaceTest {
                 // Music::PlayFromOffset(MUSIC_FILE_DRUMS, 0x5C, 0.0) style start.
                 music.playMusic(drumsSong, 0x5C, false);
                 assertTrue(music.isPlaying(drumsSong));
-                assertEquals(0x5C, music.getMusicOrder(drumsSong));
+                // The interface hands out the tracker order *pack* (row << 16 | order, see
+                // MusicInterface::getMusicOrder) - the game masks it with 0xFFFF before comparing
+                // (Music.cpp:506) and round-trips the whole pack through seekOrder. Masking here is
+                // what makes the assertion independent of which row playback happens to be on: the
+                // order is 0x5C and unmasked the value reads 0x2005C a moment into the song.
+                assertEquals(0x5C, music.getMusicOrder(drumsSong) & 0xFFFF);
 
                 // Music::SetupVolumeForTune ends with Mix_ModMusicStreamSetChannelVolume(handle,
                 // track, (int)(volume * 128)); stem 0 is full, the rest silent.

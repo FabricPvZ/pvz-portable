@@ -66,9 +66,9 @@ class EnumTableTest {
             "NUM_ZOMBIE_TYPES", 33,
             "ZOMBIE_CACHED_POLEVAULTER_WITH_POLE", 34,
             "NUM_CACHED_ZOMBIE_TYPES", 35,
-            // Mod extension window: ids from here up belong to registered mod zombies
-            // (cn.enaium.fabricpvz.portable.lawn.content.ZombieTypeRegistry).
-            "CUSTOM_ZOMBIE_FIRST", 64,
+            // The id space is wider than the retail types: MAX_ZOMBIE_TYPES is the width of every
+            // per-zombie table (and of Board::mZombieAllowed upstream), and the rows above
+            // NUM_ZOMBIE_TYPES are empty until a definition is written into them.
             "MAX_ZOMBIE_TYPES", 100
     );
 
@@ -363,9 +363,9 @@ class EnumTableTest {
             "SEED_ZOMBIE_IMP", 74,
             "NUM_SEEDS_IN_CHOOSER", 49,
             "SEED_NONE", -1,
-            // Mod extension window: ids from here up belong to registered mod plants
-            // (cn.enaium.fabricpvz.portable.lawn.content.PlantTypeRegistry).
-            "CUSTOM_SEED_FIRST", 100,
+            // The id space is wider than the retail seed types: MAX_SEED_TYPES is the width of every
+            // per-seed table (Plant::gPlantDefs included), and the rows above the retail ones are
+            // empty until a definition is written into them.
             "MAX_SEED_TYPES", 200
     );
 
@@ -734,7 +734,7 @@ class EnumTableTest {
             "RenderObjectType", 25,
             "ScaryPotType", 4,
             "SeedChooserState", 2,
-            "SeedType", 79,
+            "SeedType", 78,
             "ShieldType", 4,
             "StoreItem", 32,
             "StorePages", 5,
@@ -744,7 +744,7 @@ class EnumTableTest {
             "UnlockingState", 3,
             "ZombieHeight", 11,
             "ZombiePhase", 96,
-            "ZombieType", 39,
+            "ZombieType", 38,
             "AttachmentID", 1,
             "CoinID", 1,
             "ParticleID", 1,

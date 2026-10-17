@@ -1,6 +1,7 @@
 package cn.enaium.fabricpvz.portable.pvzp.platform.sdl;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -228,6 +229,38 @@ class SdlRendererTest {
             int blended = pixel(pixels, 64, 8, 8);
             assertTrue((blended >>> 16 & 0xFF) > 0x40, "additive red must lighten the black target: " + Integer.toHexString(blended));
             assertEquals(0, blended & 0xFF, "additive red must not add blue");
+        }
+    }
+
+    /**
+     * A read-back needs a texture that was created as a draw target ({@code SDL_TEXTUREACCESS_TARGET}):
+     * SDL refuses to bind an ordinary static texture, and reading it would silently return whatever
+     * target is still bound - the canvas or the window - clipped into the requested rectangle. Fetching
+     * the CPU bits of a static image after a purge (the {@code GLImage.getBits()} path) must therefore
+     * fail loudly, while a draw target keeps reading its own pixels back.
+     */
+    @Test
+    void readTexturePixelsRefusesAStaticTextureAndStillReadsADrawTarget() {
+        int[] source = {RED, GREEN, BLUE, WHITE}; // 2x2
+        try (SdlRenderer renderer = SdlRenderer.software(64, 64)) {
+            long staticTexture = renderer.createTexture(2, 2, source);
+            int[] garbage = new int[64 * 64];
+            assertThrows(IllegalStateException.class,
+                    () -> renderer.readTexturePixels(staticTexture, 64, 64, garbage),
+                    "reading a static texture back must be refused, not answered with another target's pixels");
+
+            long target = renderer.createRenderTargetTexture(64, 64);
+            renderer.setRenderTarget(target);
+            renderer.clear(OPAQUE_BLACK);
+            renderer.fillRect(10, 10, 20, 20, RED);
+            renderer.setRenderTarget(0);
+
+            int[] pixels = new int[64 * 64];
+            renderer.readTexturePixels(target, 64, 64, pixels);
+            renderer.destroyTexture(staticTexture);
+            renderer.destroyTexture(target);
+
+            assertPixelNear(RED, pixel(pixels, 64, 15, 15), 1, "a draw target still reads its own pixels back");
         }
     }
 

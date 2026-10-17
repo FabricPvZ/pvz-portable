@@ -12,8 +12,10 @@ import java.io.IOException;
  * <p>Upstream relies on SDL_mixer-X codec registration plus an extension probe order
  * ({@code SDLSoundManager.cpp:246}: {@code .wav}, {@code .mp3}, {@code .ogg}, then the hand-written
  * {@code .au} reader). The retail GOTY assets only contain {@code .ogg} (169 files) and {@code .mo3}
- * (2 files) — see docs/research/02-graphics-audio.md §10.10.3 — so this port sniffs the first bytes
- * of the fetched asset and dispatches to the matching decoder instead of guessing from the name.
+ * (2 files) — see docs/research/02-graphics-audio.md §10.10.3 — while the Steam build ships two
+ * µ-law {@code .au} sounds ({@code sounds/diamond.au}, {@code sounds/tapglass.au}, see
+ * docs/VERIFICATION.md §59), so this port sniffs the first bytes of the fetched asset and dispatches
+ * to the matching decoder instead of guessing from the name.
  */
 public enum AudioFormat {
 
@@ -23,17 +25,27 @@ public enum AudioFormat {
     /** RIFF/WAVE PCM, decoded by {@link WavDecoder}. */
     WAV,
 
+    /**
+     * Sun/NeXT AU ({@code ".snd"}, encoding 1 = µ-law), decoded by {@link AuDecoder}.
+     *
+     * <p>Upstream's {@code SDLSoundManager::LoadAUSound} is the last resort of the extension probe
+     * (SDLSoundManager.cpp:281-305), and the retail GOTY assets never reach it (169 {@code .ogg} +
+     * 2 {@code .mo3}, no {@code .au}); the Steam assets do ({@code sounds/diamond.au},
+     * {@code sounds/tapglass.au} — see docs/VERIFICATION.md §59).
+     */
+    AU,
+
     /** Un4seen MO3 tracker container ({@code "MO3" 0x01}), decoded by {@link Mo3Decoder}. */
     MO3,
 
-    /** Nothing recognizable (upstream's legacy {@code .mp3}/{@code .au} probes are not supported). */
+    /** Nothing recognizable (upstream's legacy {@code .mp3} probe is not supported). */
     UNKNOWN;
 
     /**
      * Sniffs the container format of {@code data} from its magic bytes.
      *
-     * <p>Recognizes {@code "RIFF"}{@code "WAVE"} (WAV), {@code "OggS"} (OGG) and {@code "MO3"} (MO3);
-     * anything else is {@link #UNKNOWN}.
+     * <p>Recognizes {@code "RIFF"}{@code "WAVE"} (WAV), {@code "OggS"} (OGG), {@code ".snd"} (AU)
+     * and {@code "MO3"} (MO3); anything else is {@link #UNKNOWN}.
      */
     public static AudioFormat sniff(byte[] data) {
         if (data == null || data.length < 12) {
@@ -44,6 +56,9 @@ public enum AudioFormat {
         }
         if (isAscii(data, 0, "OggS")) {
             return OGG;
+        }
+        if (isAscii(data, 0, ".snd")) {
+            return AU;
         }
         if (isAscii(data, 0, "MO3")) {
             return MO3;
@@ -68,6 +83,7 @@ public enum AudioFormat {
         return switch (this) {
             case WAV -> WavDecoder.decode(data);
             case OGG -> OggVorbisDecoder.decode(data);
+            case AU -> AuDecoder.decode(data);
             case MO3 -> Mo3Decoder.decode(data);
             case UNKNOWN -> throw new IOException("Unsupported audio format");
         };
@@ -78,6 +94,7 @@ public enum AudioFormat {
         return switch (this) {
             case WAV -> WavDecoder.openStream(data);
             case OGG -> OggVorbisDecoder.openStream(data);
+            case AU -> AuDecoder.openStream(data);
             case MO3 -> Mo3Decoder.openStream(data);
             case UNKNOWN -> throw new IOException("Unsupported audio format");
         };

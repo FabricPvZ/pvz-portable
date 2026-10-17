@@ -12,8 +12,8 @@
  */
 package cn.enaium.fabricpvz.portable.lawn;
 
-import cn.enaium.fabricpvz.portable.lawn.content.CustomZombieType;
-import cn.enaium.fabricpvz.portable.lawn.content.ZombieTypeRegistry;
+import java.util.Arrays;
+
 import cn.enaium.fabricpvz.portable.pvzp.PvzpCommon;
 import cn.enaium.fabricpvz.portable.pvzp.fx.FoleyType;
 import cn.enaium.fabricpvz.portable.pvzp.fx.PvzpParticleSystem;
@@ -76,8 +76,18 @@ public class Zombie extends GameObject {
     /** Zombie.cpp:73 */
     public static final Color ZOMBIE_MINDCONTROLLED_COLOR = new Color(128, 64, 192, 255);
 
-    /** Zombie.cpp:80-115 */
-    public static final ZombieDefinition[] gZombieDefs = {
+    /**
+     * Zombie.cpp:80-115 — the zombie definition table, index == ZombieType; upstream rows 0 to
+     * {@link ZombieType#NUM_ZOMBIE_TYPES} (plus the cached pole-vaulter row) verbatim.
+     *
+     * <p>Same table, but as wide as the zombie-type id space ({@link ZombieType#MAX_ZOMBIE_TYPES}):
+     * zombie type {@code n} always has its row {@code n}, the retail rows are filled in here, and
+     * every row above them is empty ({@code null}) until a definition is written into it. A
+     * {@code null} row is a zombie type nothing defines, which is what
+     * {@link #getZombieDefinition(int)} answers for it and what the loops walking the table skip.
+     * See {@code Plant#gPlantDefs} for the write-before-read contract of such a table.
+     */
+    public static final ZombieDefinition[] gZombieDefs = Arrays.copyOf(new ZombieDefinition[] {
         new ZombieDefinition(ZombieType.ZOMBIE_NORMAL, ReanimationType.REANIM_ZOMBIE, 1, 1, 1, 4000, "ZOMBIE"),
         new ZombieDefinition(ZombieType.ZOMBIE_FLAG, ReanimationType.REANIM_ZOMBIE, 1, 1, 1, 0, "FLAG_ZOMBIE"),
         new ZombieDefinition(ZombieType.ZOMBIE_TRAFFIC_CONE, ReanimationType.REANIM_ZOMBIE, 2, 3, 1, 4000, "CONEHEAD_ZOMBIE"),
@@ -111,7 +121,7 @@ public class Zombie extends GameObject {
         new ZombieDefinition(ZombieType.ZOMBIE_SQUASH_HEAD, ReanimationType.REANIM_ZOMBIE, 3, 99, 10, 2000, "ZOMBIE"),
         new ZombieDefinition(ZombieType.ZOMBIE_TALLNUT_HEAD, ReanimationType.REANIM_ZOMBIE, 4, 99, 10, 2000, "ZOMBIE"),
         new ZombieDefinition(ZombieType.ZOMBIE_REDEYE_GARGANTUAR, ReanimationType.REANIM_GARGANTUAR, 10, 48, 15, 6000, "REDEYED_GARGANTUAR"),
-    };
+    }, ZombieType.MAX_ZOMBIE_TYPES);
 
     /** Zombie.cpp:116-129 */
     public static final int[] gBossZombieList = {
@@ -129,16 +139,27 @@ public class Zombie extends GameObject {
         ZombieType.ZOMBIE_GARGANTUAR,
     };
 
-    /** Zombie.cpp:131-140 */
+    /**
+     * Zombie.cpp:131-140 — the definition of a zombie type, or {@code null} when the type has none.
+     *
+     * <p>A row that is still empty is a zombie type nobody defined, and an id outside the zombie-type
+     * id space has no row at all; both answer {@code null}, so a caller can tell "this type has no
+     * definition" from "this type is defined" without knowing which ids are in use.
+     */
     public static ZombieDefinition getZombieDefinition(int theZombieType) {
-        // Mod zombies live in the registry instead of the baked-in table (see ZombieTypeRegistry).
-        if (theZombieType >= ZombieType.CUSTOM_ZOMBIE_FIRST) {
-            return ZombieTypeRegistry.definition(theZombieType);
+        if (theZombieType < 0 || theZombieType >= gZombieDefs.length) {
+            return null;
         }
 
-        assert theZombieType >= 0 && theZombieType < ZombieType.NUM_ZOMBIE_TYPES;
-        assert gZombieDefs[theZombieType].mZombieType == theZombieType;
-        return gZombieDefs[theZombieType];
+        ZombieDefinition aDef = gZombieDefs[theZombieType];
+        if (aDef == null) {
+            return null;
+        }
+
+        if (aDef.mZombieType != theZombieType) {
+            throw new IllegalStateException("gZombieDefs is not index-aligned at " + theZombieType);
+        }
+        return aDef;
     }
 
     // ------------------------------------------------------------------
@@ -869,12 +890,6 @@ public class Zombie extends GameObject {
             break;
         }
 
-        // Mod zombies get the plain-zombie reanimation setup plus the numbers and the optional head
-        // attachment their registration provided; an unmodded game never enters this branch.
-        if (mZombieType >= ZombieType.CUSTOM_ZOMBIE_FIRST) {
-            ZombieTypeRegistry.applyToZombie(this);
-        }
-
         if (isOnBoard() && mApp.mGameMode == GameMode.GAMEMODE_CHALLENGE_ZOMBIQUARIUM) {
             float aAnimRate = PvzpCommon.randRangeFloat(8.0f, 10.0f);
             playZombieReanim("anim_aquarium_swim", ReanimLoopType.REANIM_LOOP, 0, aAnimRate);
@@ -1422,10 +1437,6 @@ public class Zombie extends GameObject {
 
             Attachment.attachmentUpdateAndMove(mAttachmentID, mPosX, mPosY);
             updateReanim();
-
-            if (mZombieType >= ZombieType.CUSTOM_ZOMBIE_FIRST) {
-                ZombieTypeRegistry.updateZombie(this);
-            }
         }
     }
 
@@ -2637,11 +2648,6 @@ public class Zombie extends GameObject {
      * Ported from src/Lawn/Zombie.cpp:8277-8292.
      */
     public static boolean zombieTypeCanGoInPool(int theZombieType) {
-        if (theZombieType >= ZombieType.CUSTOM_ZOMBIE_FIRST) {
-            CustomZombieType aCustom = ZombieTypeRegistry.get(theZombieType);
-            return aCustom != null && aCustom.mCanGoInPool;
-        }
-
         return theZombieType == ZombieType.ZOMBIE_NORMAL
                 || theZombieType == ZombieType.ZOMBIE_TRAFFIC_CONE
                 || theZombieType == ZombieType.ZOMBIE_PAIL

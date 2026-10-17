@@ -81,13 +81,20 @@ public final class SdlPlatform implements PlatformBackend {
             throw new IllegalStateException("SDL_Init(SDL_INIT_VIDEO) failed: " + SDLError.SDL_GetError());
         }
         long flags = 0;
-        // Upstream creates the window with SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE and no high-density
-        // flag (platform/default/Window.cpp:59), so the drawable matches the window's own size: the
-        // framework draws in window coordinates and nothing rescales them. Requesting a high-density
-        // drawable instead (an 800x600 window becoming 1600x1200 pixels on Retina) makes every draw go
-        // through SDL's logical-presentation scaling, and quads drawn with rotation/skew come out
-        // distorted on the Metal backend. The 800x600 output is upscaled at present instead, which is
-        // what the original game does on a Retina display.
+        // A high-density drawable is requested so that the frame is rendered at the display's real pixel
+        // resolution: an 800x600 logical canvas gets a 1600x1200 drawable on Retina instead of being
+        // stretched from 800x600 by the window server. The scaling is then done once per frame by the
+        // renderer (SdlRenderer draws the canvas 1:1 and composites it into the drawable), not by SDL's
+        // logical presentation per primitive.
+        //
+        // The flag is not what upstream does - platform/default/Window.cpp:59 creates the window with
+        // SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE only - and an earlier version of this port removed it
+        // again for a reason that no longer applies: with every primitive scaled by SDL's logical
+        // presentation, quads drawn rotated or skewed came out distorted on the Metal backend, which is
+        // exactly what the scene canvas removes (see SdlRenderer.sceneTarget). Kept unconditional:
+        // requesting it on a display with no density (the dummy driver, a 1x display) leaves the drawable
+        // equal to the window size, and the renderer then draws into the window exactly as before.
+        flags |= SDLVideo.SDL_WINDOW_HIGH_PIXEL_DENSITY;
         if (options.resizable()) {
             flags |= SDLVideo.SDL_WINDOW_RESIZABLE;
         }
@@ -135,6 +142,7 @@ public final class SdlPlatform implements PlatformBackend {
         if (!mInitialized) {
             throw new IllegalStateException("platform not initialized");
         }
+        settleWindowSize();
         SdlRenderer renderer;
         try {
             renderer = SdlRenderer.forWindow(mWindow, driver);
@@ -150,6 +158,56 @@ public final class SdlPlatform implements PlatformBackend {
         mRenderer = renderer;
         return renderer;
     }
+
+    /**
+     * Waits until the window has the size the window manager gives it, before anything is built on top
+     * of the window.
+     *
+     * <p>SDL's software renderer captures the window's framebuffer surface when it is created
+     * ({@code SW_CreateRenderer} in SDL_render_sw.c) and re-reads it only when a
+     * {@code SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED} reaches the window-event watch SDL installs for the
+     * renderer once it exists. A window whose size has not settled yet therefore leaves that renderer
+     * with a surface of the requested size for the rest of the process: on Wayland a fullscreen window
+     * is created at the requested size (800x600) and resized by the compositor's configure, which SDL
+     * processes during the first event pump - i.e. after the renderer was created - and the software
+     * renderer then composites every frame with window geometry into its smaller surface (clipping it)
+     * and reads back only that surface. Measured on Linux/Wayland: an 800x600 renderer output inside a
+     * 1464x885 window, and a window dump with 815,640 untouched pixels.
+     *
+     * <p>{@code SDL_SyncWindow} is the API that waits for exactly this (on Wayland it round-trips the
+     * compositor, which is what delivers the configure); the bounded loop afterwards only covers a
+     * window manager that needs another round trip. A backend without a sync of its own (macOS) or a
+     * window whose size never changes leaves the loop in its first iteration, and the whole wait is
+     * capped so a slow or silent window manager cannot hold up the start.
+     */
+    private void settleWindowSize() {
+        if (mWindow == 0) {
+            return;
+        }
+        SDLVideo.SDL_SyncWindow(mWindow);
+        int aPreviousWidth = -1;
+        int aPreviousHeight = -1;
+        for (int i = 0; i < SETTLE_WINDOW_SIZE_ATTEMPTS; i++) {
+            SDLEvents.SDL_PumpEvents();
+            updateWindowSize();
+            if (mPixelWidth == aPreviousWidth && mPixelHeight == aPreviousHeight) {
+                return;
+            }
+            aPreviousWidth = mPixelWidth;
+            aPreviousHeight = mPixelHeight;
+            sleepMillis(SETTLE_WINDOW_SIZE_INTERVAL_MS, 0);
+        }
+        cn.enaium.fabricpvz.portable.sexy.Common.logErrorLn(
+                "the window is still being resized after {} ms ({}x{} pixels): a renderer created now may"
+                        + " keep drawing into a stale surface",
+                SETTLE_WINDOW_SIZE_ATTEMPTS * SETTLE_WINDOW_SIZE_INTERVAL_MS, mPixelWidth, mPixelHeight);
+    }
+
+    /** Attempts of {@link #settleWindowSize()}: 100 x 5 ms caps the wait at half a second. */
+    private static final int SETTLE_WINDOW_SIZE_ATTEMPTS = 100;
+
+    /** Interval between the {@link #settleWindowSize()} attempts, in milliseconds. */
+    private static final int SETTLE_WINDOW_SIZE_INTERVAL_MS = 5;
 
     public SdlRenderer renderer() {
         return mRenderer;

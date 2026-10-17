@@ -1,6 +1,5 @@
 package cn.enaium.fabricpvz.portable.sexy;
 
-import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -972,7 +971,7 @@ public final class Common {
     /** Ported from src/SexyAppFramework/Common.cpp:265. */
     public static String getCurDir() {
         try {
-            return Paths.get("").toAbsolutePath().toString();
+            return pathToU8(Paths.get("").toAbsolutePath());
         } catch (RuntimeException e) {
             return "";
         }
@@ -1096,6 +1095,15 @@ public final class Common {
      * <p>Upstream returns {@code path(theDirectory).lexically_normal()}: the empty path is returned
      * verbatim, everything else is lexically normalized (trailing slashes and {@code .}/{@code ..}
      * components removed) without touching the filesystem.
+     *
+     * <p>PORT-NOTE: unlike {@link #pathToU8} this deliberately keeps the host's native separators.
+     * Its inputs are not asset paths: {@code SexyAppBase} passes Windows registry key names
+     * ({@code "SOFTWARE\\" + mRegKey}, see {@code RegEmu}) whose {@code '\'} is a registry separator,
+     * and on POSIX {@link java.nio.file.Path} treats {@code '\'} as an ordinary character, exactly
+     * like upstream's non-Windows {@code PathFromU8}. Rewriting it to {@code '/'} would silently
+     * change the keys persisted in {@code userdata/registry.regemu}. The resource-manifest callers
+     * ({@code ResourceManager.parseSetDefaults}) pass {@code '/'}-free paths authored in
+     * {@code properties/resources.xml}, so they are unaffected either way.
      */
     public static String removeTrailingSlash(String theDirectory) {
         if (theDirectory == null || theDirectory.isEmpty()) {
@@ -1506,22 +1514,61 @@ public final class Common {
         return true;
     }
 
-    /** Ported from src/SexyAppFramework/Common.h:376 ({@code PathFromU8} on non-Windows). */
+    /**
+     * Ported from src/SexyAppFramework/Common.h:365-374 ({@code PathFromU8}).
+     *
+     * <p>PORT-NOTE: every string path the framework produces is in the portable (POSIX/generic)
+     * form, i.e. {@code '/'}-separated, on <em>every</em> host — see {@link #toPortablePath} for
+     * why. This is the input half of that bridge, so a Windows-style string
+     * ({@code "data\Foo"}) means the same thing here as it does on Windows.
+     */
     private static Path pathFromU8(String s) {
-        return Paths.get(s);
-    }
-
-    /** Ported from src/SexyAppFramework/Common.h:377 ({@code PathToU8} on non-Windows). */
-    private static String pathToU8(Path p) {
-        return p.toString();
+        return Paths.get(toPortablePath(s));
     }
 
     /**
-     * Upstream relies on {@code std::filesystem::path} being separator-aware on the build platform;
-     * this mirrors that by treating {@code '\\'} as a separator only on Windows-like hosts.
+     * Ported from src/SexyAppFramework/Common.h:365-374 ({@code PathToU8}): on Windows upstream
+     * hands back {@code path::generic_u8string()} (forward slashes), and on POSIX
+     * {@code path::string()} (also forward slashes). This is the output half of the bridge, so the
+     * returned string never contains the host's native separator.
+     */
+    private static String pathToU8(Path p) {
+        return toPortablePath(p.toString());
+    }
+
+    /**
+     * Converts a host path string into the framework's portable path form: {@code '\'} becomes
+     * {@code '/'}, on every host.
+     *
+     * <p>Upstream only reaches this state on Windows ({@code PathToU8} uses
+     * {@code generic_u8string()}), yet the surrounding framework string code is {@code '/'}-based by
+     * construction on all platforms: {@code GetFileDir(..., withSlash)} appends {@code '/'},
+     * {@code ImageLib::GetImage} probes the {@code '_'} companion with {@code rfind('/')}
+     * (ImageLib.cpp:1259-1293), the pak member table stores {@code '/'} names, and resource paths
+     * come from the {@code '/'}-authored resource manifests. Emitting native separators (the old
+     * {@code Path.toString()}) therefore injected {@code '\'} into that {@code '/'}-speaking world on
+     * Windows only, which broke e.g. the {@code data\BrianneTod32Outline} font image lookup (see
+     * docs/VERIFICATION.md §59).
+     *
+     * <p>Converting unconditionally — instead of following {@code File.separatorChar} — keeps the
+     * two directions of the bridge idempotent and makes path handling independent of the host OS: a
+     * path string means the same thing on macOS, Linux and Windows, and the Windows behaviour stays
+     * covered by tests running on any host. {@link java.nio.file.Path} accepts {@code '/'} on
+     * Windows, so real file access is unaffected; the only cost is that a POSIX file name containing
+     * a literal {@code '\'} can no longer be named — which the framework never could address anyway.
+     */
+    private static String toPortablePath(String thePath) {
+        return thePath.indexOf('\\') == -1 ? thePath : thePath.replace('\\', '/');
+    }
+
+    /**
+     * Upstream relies on {@code std::filesystem::path} being separator-aware on the build platform.
+     * The port's path strings are portable ({@link #toPortablePath}), so both separators are
+     * separators on every host — otherwise {@code GetFileDir}/{@code GetFileName} would disagree
+     * with {@link #getPathFrom} about what a Windows-style string means.
      */
     private static boolean isPathSeparator(char c) {
-        return c == '/' || (c == '\\' && File.separatorChar == '\\');
+        return c == '/' || c == '\\';
     }
 
     /**

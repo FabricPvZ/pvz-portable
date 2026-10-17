@@ -50,12 +50,29 @@ class ScreenResourceLoadingTest {
     /**
      * Paints the screen into an offscreen image. The reported help crash was an NPE raised while drawing
      * the images the screen never loaded, so drawing is the check that actually covers it.
+     *
+     * <p>That the draw really painted is asserted on the target's own CPU pixels. The target is a plain
+     * {@code MemoryImage}, so its {@code getBits()} is its own buffer and the images the screen blits
+     * into it are read through their CPU bits - no GPU read-back takes part, and in particular not
+     * {@code GLImage.getBits()}'s texture read-back (the one that reads another target's pixels for a
+     * static texture; see {@code SdlRenderer#readTexturePixels} and docs/VERIFICATION.md §62.5
+     * deviation 3 / §64). A test whose only witness is that read-back would be checking the wrong
+     * surface, which is why this one must not depend on it.
      */
     private static void assertPaints(String theScreen, cn.enaium.fabricpvz.portable.sexy.Widget theWidget) {
         var aTarget = new cn.enaium.fabricpvz.portable.sexy.graphics.MemoryImage(null);
         aTarget.create(800, 600);
         theWidget.resize(0, 0, 800, 600);
         theWidget.draw(new cn.enaium.fabricpvz.portable.sexy.graphics.Graphics(aTarget));
+
+        int aPainted = 0;
+        int[] aPixels = aTarget.getBits();
+        for (int aPixel = 0; aPixel < 800 * 600; aPixel++) {
+            if ((aPixels[aPixel] >>> 24) != 0) {
+                aPainted++;
+            }
+        }
+        assertTrue(aPainted > 0, theScreen + " must paint opaque pixels into its target, painted: " + aPainted);
     }
 
     private static void assertGroupsBound(String theScreen, Iterable<String> theGroups) {

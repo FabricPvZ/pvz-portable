@@ -14,10 +14,6 @@
  */
 package cn.enaium.fabricpvz.portable.lawn;
 
-import cn.enaium.fabricpvz.portable.lawn.content.CustomPlantType;
-import cn.enaium.fabricpvz.portable.lawn.content.CustomZombieType;
-import cn.enaium.fabricpvz.portable.lawn.content.PlantTypeRegistry;
-import cn.enaium.fabricpvz.portable.lawn.content.ZombieTypeRegistry;
 import cn.enaium.fabricpvz.portable.lawn.hooks.LawnHooksRegistry;
 import cn.enaium.fabricpvz.portable.lawn.system.Music;
 import cn.enaium.fabricpvz.portable.lawn.system.PlayerInfo;
@@ -2220,11 +2216,6 @@ public class LawnApp extends SexyApp {
             case SeedType.SEED_IMITATER:
                 return mPlayerInfo.mPurchases[StoreItem.STORE_ITEM_PLANT_IMITATER] > 0;
             default:
-                // Mod plants carry no unlock state: registering one makes it available.
-                if (theSeedType >= SeedType.CUSTOM_SEED_FIRST) {
-                    return PlantTypeRegistry.get(theSeedType) != null;
-                }
-
                 return theSeedType < getSeedsAvailable();
         }
     }
@@ -2968,18 +2959,26 @@ public class LawnApp extends SexyApp {
     public int getNumPreloadingTasks() {
         int aTaskCount = 10;
         if (mPlayerInfo != null) {
-            for (int i = SeedType.SEED_PEASHOOTER; i < SeedType.NUM_SEED_TYPES; i++) {
+            // The plant loop walks the seed-type id space, not just the retail seed types: a seed
+            // type with a definition row is a plant that may have to be preloaded, whether it is one
+            // of the retail ones or one a definition was written for. An empty row is no plant, and
+            // skipping it before asking HasSeedType is what keeps this loop's count equal to the
+            // number of plants PreloadForUser actually loads.
+            for (int i = SeedType.SEED_PEASHOOTER; i < SeedType.MAX_SEED_TYPES; i++) {
+                if (Plant.gPlantDefs[i] == null) {
+                    continue;
+                }
                 if (hasSeedType(i) || hasFinishedAdventure()) {
                     aTaskCount++;
                 }
             }
 
-            // Mod plants carry no player-info unlock state: they are always preloaded, and the
-            // matching loop in PreloadForUser must count the same number of tasks.
-            aTaskCount += PlantTypeRegistry.count();
-
-            for (int i = ZombieType.ZOMBIE_NORMAL; i < ZombieType.NUM_ZOMBIE_TYPES; i++) {
-                if (hasFinishedAdventure() || mPlayerInfo.mLevel >= Zombie.getZombieDefinition(i).mStartingLevel) {
+            for (int i = ZombieType.ZOMBIE_NORMAL; i < ZombieType.MAX_ZOMBIE_TYPES; i++) {
+                ZombieDefinition aZombieDef = Zombie.getZombieDefinition(i);
+                if (aZombieDef == null) {
+                    continue;
+                }
+                if (hasFinishedAdventure() || mPlayerInfo.mLevel >= aZombieDef.mStartingLevel) {
                     if (i != ZombieType.ZOMBIE_BOSS
                             && i != ZombieType.ZOMBIE_CATAPULT
                             && i != ZombieType.ZOMBIE_GARGANTUAR
@@ -2987,13 +2986,6 @@ public class LawnApp extends SexyApp {
                             && i != ZombieType.ZOMBIE_ZAMBONI) {
                         aTaskCount++;
                     }
-                }
-            }
-
-            // Same rule for mod zombies; the matching loop in PreloadForUser mirrors it.
-            for (CustomZombieType aCustom : ZombieTypeRegistry.all()) {
-                if (hasFinishedAdventure() || mPlayerInfo.mLevel >= aCustom.mDefinition.mStartingLevel) {
-                    aTaskCount++;
                 }
             }
         }
@@ -3027,7 +3019,10 @@ public class LawnApp extends SexyApp {
         mCompletedLoadingThreadTasks.addAndGet(68);
 
         if (mPlayerInfo != null) {
-            for (int i = SeedType.SEED_PEASHOOTER; i < SeedType.NUM_SEED_TYPES; i++) {
+            for (int i = SeedType.SEED_PEASHOOTER; i < SeedType.MAX_SEED_TYPES; i++) {
+                if (Plant.gPlantDefs[i] == null) {
+                    continue;
+                }
                 if (hasSeedType(i) || hasFinishedAdventure()) {
                     Plant.preloadPlantResources(i);
                     if (mCompletedLoadingThreadTasks.get() < aNumTasks) {
@@ -3046,26 +3041,12 @@ public class LawnApp extends SexyApp {
                 }
             }
 
-            // Mod plants: same bookkeeping as the upstream loop, counted in GetNumPreloadingTasks.
-            for (CustomPlantType aCustom : PlantTypeRegistry.all()) {
-                Plant.preloadPlantResources(aCustom.mSeedType);
-                if (mCompletedLoadingThreadTasks.get() < aNumTasks) {
-                    mCompletedLoadingThreadTasks.addAndGet(68);
+            for (int i = ZombieType.ZOMBIE_NORMAL; i < ZombieType.MAX_ZOMBIE_TYPES; i++) {
+                ZombieDefinition aZombieDef = Zombie.getZombieDefinition(i);
+                if (aZombieDef == null) {
+                    continue;
                 }
-
-                if (mTitleScreen != null && mTitleScreen.mQuickLoadKey != KeyCode.KEYCODE_UNKNOWN) {
-                    Common.logInfoLn("preload canceled");
-                    mNumLoadingThreadTasks.set(aNumTasks);
-                    return;
-                }
-
-                if (mShutdown.get() || mCloseRequest) {
-                    return;
-                }
-            }
-
-            for (int i = ZombieType.ZOMBIE_NORMAL; i < ZombieType.NUM_ZOMBIE_TYPES; i++) {
-                if (!hasFinishedAdventure() && mPlayerInfo.mLevel < Zombie.getZombieDefinition(i).mStartingLevel) {
+                if (!hasFinishedAdventure() && mPlayerInfo.mLevel < aZombieDef.mStartingLevel) {
                     continue;
                 }
                 if (i == ZombieType.ZOMBIE_BOSS || i == ZombieType.ZOMBIE_CATAPULT
@@ -3090,35 +3071,6 @@ public class LawnApp extends SexyApp {
                 }
             }
         }
-
-            // Mod zombies: same bookkeeping as the upstream loop, counted in GetNumPreloadingTasks.
-            for (CustomZombieType aCustom : ZombieTypeRegistry.all()) {
-                if (mPlayerInfo == null) {
-                    // No profile yet (first run, before the user dialog): the matching loop in
-                    // GetNumPreloadingTasks skips mod zombies in that case too, so skipping here keeps
-                    // the preload task bookkeeping consistent.
-                    continue;
-                }
-
-                if (!hasFinishedAdventure() && mPlayerInfo.mLevel < aCustom.mDefinition.mStartingLevel) {
-                    continue;
-                }
-
-                Zombie.preloadZombieResources(aCustom.mZombieType);
-                if (mCompletedLoadingThreadTasks.get() < aNumTasks) {
-                    mCompletedLoadingThreadTasks.addAndGet(68);
-                }
-
-                if (mTitleScreen != null && mTitleScreen.mQuickLoadKey != KeyCode.KEYCODE_UNKNOWN) {
-                    Common.logInfoLn("preload canceled");
-                    mNumLoadingThreadTasks.set(aNumTasks);
-                    return;
-                }
-
-                if (mShutdown.get() || mCloseRequest) {
-                    return;
-                }
-            }
 
         if (mCompletedLoadingThreadTasks.get() != aNumTasks) {
             Common.logInfoLn("num preload tasks wasn't calculated correctly");

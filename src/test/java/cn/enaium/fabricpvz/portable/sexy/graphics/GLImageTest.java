@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -546,10 +547,32 @@ class GLImageTest {
     }
 
     @Test
-    void purgeBitsUploadsThenDropsBitsAndDoesNotReupload() {
+    void purgeBitsKeepsTheBitsOfAStaticTextureWithNoFile() {
         Recorder aRecorder = new Recorder();
         int[] aBits = {0xFF112233, 0x80445566, 0xFF778899, 0x00000000};
         GLImage anImage = sourceImage(aRecorder, 2, 2, aBits);
+
+        // A static texture cannot be read back and the image was made from bits (no file to re-decode
+        // from), so dropping the CPU copy would lose the pixels for good: they are kept.
+        anImage.purgeBits();
+
+        assertTrue(anImage.mPurgeBits);
+        assertNotEquals(0L, anImage.mRenderData);
+        assertEquals(1, aRecorder.creates.size());
+        assertUploaded(aBits, aRecorder.creates.get(0).pixels());
+        assertNotNull(anImage.mBits);
+
+        // getBits hands the kept pixels straight back, never asking the backend for a read-back.
+        assertSame(anImage.mBits, anImage.getBits());
+        assertArrayEquals(aBits, new int[]{anImage.mBits[0], anImage.mBits[1], anImage.mBits[2], anImage.mBits[3]});
+        assertTrue(aRecorder.readbacks.isEmpty());
+    }
+
+    @Test
+    void purgeBitsDropsTheBitsOfADrawTargetAndDoesNotReupload() {
+        Recorder aRecorder = new Recorder();
+        GLImage anImage = sourceImage(aRecorder, 2, 2, new int[]{0xFF112233, 0x80445566, 0xFF778899, 0x00000000});
+        anImage.mRenderTarget = true; // a draw target's own texture holds the pixels
         GLImage aTarget = targetImage(aRecorder);
 
         // Upstream deferral: the texture must exist before the CPU bits are freed.
@@ -558,13 +581,13 @@ class GLImageTest {
         assertTrue(anImage.mPurgeBits);
         assertNotEquals(0L, anImage.mRenderData);
         assertNull(anImage.mBits);
-        assertEquals(1, aRecorder.creates.size());
-        assertUploaded(aBits, aRecorder.creates.get(0).pixels());
+        assertEquals(1, aRecorder.renderTargetCreates.size());
+        assertTrue(aRecorder.creates.isEmpty());
 
-        // The texture already owns the pixels, so a later blit must not re-upload them.
+        // The texture already owns the pixels, so a later blit must not re-create or re-upload them.
         int aChanged = anImage.mBitsChangedCount;
         aTarget.blt(anImage, 0, 0, new Rect(0, 0, 2, 2), Color.White, Graphics.DRAWMODE_NORMAL, true);
-        assertEquals(1, aRecorder.creates.size());
+        assertEquals(1, aRecorder.renderTargetCreates.size());
         assertTrue(aRecorder.updates.isEmpty());
         assertEquals(aChanged, anImage.mBitsChangedCount);
     }
@@ -574,9 +597,10 @@ class GLImageTest {
         Recorder aRecorder = new Recorder();
         int[] aBits = {0xFF112233, 0x80445566, 0xFF778899, 0x00000000};
         GLImage anImage = sourceImage(aRecorder, 2, 2, aBits);
-        anImage.purgeBits(); // uploads the texture, then drops the CPU bits
+        anImage.mRenderTarget = true; // only a draw target's texture can be read back
+        anImage.purgeBits(); // creates the draw-target texture, then drops the CPU bits
         assertNull(anImage.mBits);
-        assertEquals(1, aRecorder.creates.size());
+        assertEquals(1, aRecorder.renderTargetCreates.size());
 
         int[] aRestored = {0xDEADBEEF, 0xCAFEBABE, 0x01234567, 0x89ABCDEF};
         aRecorder.readbackPixels = aRestored;
@@ -591,9 +615,33 @@ class GLImageTest {
         assertEquals(anImage.mRenderData, aRecorder.readbacks.get(0).longValue());
 
         // Readback must not re-upload nor change the invalidation counter.
-        assertEquals(1, aRecorder.creates.size());
+        assertEquals(1, aRecorder.renderTargetCreates.size());
         assertTrue(aRecorder.updates.isEmpty());
         assertEquals(aChanged, anImage.mBitsChangedCount);
+    }
+
+    @Test
+    void getBitsDoesNotReadBackAStaticTexture() {
+        Recorder aRecorder = new Recorder();
+        int[] aBits = {0xFF112233, 0x80445566, 0xFF778899, 0x00000000};
+        GLImage anImage = sourceImage(aRecorder, 2, 2, aBits);
+        anImage.ensureTexture(anImage); // uploads the static, non-drawable texture
+        assertNotEquals(0L, anImage.mRenderData);
+        assertFalse(anImage.mRenderTarget);
+
+        // The state the read-back branch used to answer for: CPU bits gone, texture present and current.
+        anImage.mBits = null;
+        // These wrong pixels would be handed back if the read-back branch were taken.
+        aRecorder.readbackPixels = new int[]{0xDEADBEEF, 0xCAFEBABE, 0x01234567, 0x89ABCDEF};
+
+        int[] aResult = anImage.getBits();
+
+        assertTrue(aRecorder.readbacks.isEmpty(), "a static texture must never be read back");
+        assertEquals(5, aResult.length);
+        // No file to re-decode from: a fresh, zeroed buffer - never another target's pixels.
+        assertEquals(0, aResult[0]);
+        assertEquals(0, aResult[3]);
+        assertEquals(MemoryImage.MEMORYCHECK_ID, aResult[4]);
     }
 
     @Test

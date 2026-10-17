@@ -2,8 +2,6 @@ package cn.enaium.fabricpvz.portable.lawn;
 
 import java.util.Arrays;
 
-import cn.enaium.fabricpvz.portable.lawn.content.CustomZombieType;
-import cn.enaium.fabricpvz.portable.lawn.content.ZombieTypeRegistry;
 import cn.enaium.fabricpvz.portable.lawn.hooks.LawnHooksRegistry;
 import cn.enaium.fabricpvz.portable.pvzp.PvzpCommon;
 import cn.enaium.fabricpvz.portable.pvzp.PvzpDebug;
@@ -89,7 +87,7 @@ final class BoardWaves {
     // Board.cpp:560
     static void putInMissingZombies(Board b, int theWaveNumber, ZombiePicker theZombiePicker) {
         for (int aZombieType = ZombieType.ZOMBIE_NORMAL; aZombieType < ZombieType.MAX_ZOMBIE_TYPES; aZombieType++) {
-            if (aZombieType >= ZombieType.NUM_ZOMBIE_TYPES && !ZombieTypeRegistry.isWaveEnabled(aZombieType)) {
+            if (Zombie.getZombieDefinition(aZombieType) == null) {
                 continue;
             }
             if (theZombiePicker.mZombieTypeCount[aZombieType] <= 0 && aZombieType != ZombieType.ZOMBIE_YETI
@@ -271,7 +269,7 @@ final class BoardWaves {
         }
 
         for (int aZombieType = ZombieType.ZOMBIE_NORMAL; aZombieType < ZombieType.MAX_ZOMBIE_TYPES; aZombieType++) {
-            if (aZombieType >= ZombieType.NUM_ZOMBIE_TYPES && !ZombieTypeRegistry.isWaveEnabled(aZombieType)) {
+            if (Zombie.getZombieDefinition(aZombieType) == null) {
                 continue;
             }
             b.mZombieAllowed[aZombieType] = canZombieSpawnOnLevel(aZombieType, theForLevel);
@@ -315,8 +313,8 @@ final class BoardWaves {
             initZombieWavesForLevel(b, b.mLevel);
         } else {
             b.mChallenge.initZombieWaves();
+            allowZombieTypesTheRetailListsCannotName(b);
         }
-        addCustomZombieWaves(b);
         pickZombieWaves(b);
 
         b.mCurrentWave = 0;
@@ -337,21 +335,6 @@ final class BoardWaves {
         b.mLevelAwardSpawned = false;
         b.mZombieCountDownStart = b.mZombieCountDown;
         b.mZombieHealthToNextWave = -1;
-    }
-
-    /**
-     * Marks every registered mod zombie that asked to take part in waves
-     * ({@link CustomZombieType#mWaveEnabled}) as spawnable for the current level.
-     *
-     * <p>Runs after the upstream per-mode fill of {@code Board#mZombieAllowed}, so the upstream
-     * zombie set is untouched; with an empty {@link ZombieTypeRegistry} this is a no-op.
-     */
-    static void addCustomZombieWaves(Board b) {
-        for (CustomZombieType aCustom : ZombieTypeRegistry.all()) {
-            if (aCustom.mWaveEnabled) {
-                b.mZombieAllowed[aCustom.mZombieType] = true;
-            }
-        }
     }
 
     // Board.cpp:1249
@@ -434,13 +417,11 @@ final class BoardWaves {
 
     // Board.cpp:2336
     static boolean canZombieSpawnOnLevel(int theZombieType, int theLevel) {
-        if (theZombieType >= ZombieType.CUSTOM_ZOMBIE_FIRST) {
-            ZombieDefinition aCustomDef = Zombie.getZombieDefinition(theZombieType);
-            return ZombieTypeRegistry.isWaveEnabled(theZombieType)
-                    && theLevel >= aCustomDef.mStartingLevel && aCustomDef.mPickWeight != 0;
+        ZombieDefinition aZombieDef = Zombie.getZombieDefinition(theZombieType);
+        if (aZombieDef == null) {
+            return false;
         }
 
-        ZombieDefinition aZombieDef = Zombie.getZombieDefinition(theZombieType);
         if (theZombieType == ZombieType.ZOMBIE_YETI) {
             return LawnApp.gLawnApp.canSpawnYetis();
         }
@@ -448,8 +429,34 @@ final class BoardWaves {
         if (theLevel < aZombieDef.mStartingLevel || aZombieDef.mPickWeight == 0) {
             return false;
         }
+        // A zombie type with no per-level row in Challenge::gZombieAllowedLevels - the retail table
+        // ends at NUM_ZOMBIE_TYPES - is gated by its own definition row alone, which the check above
+        // just did.
+        if (theZombieType >= Challenge.gZombieAllowedLevels.length) {
+            return true;
+        }
 
         return Challenge.gZombieAllowedLevels[theZombieType].mAllowedOnLevel[Math.max(0, Math.min(theLevel - 1, GameConstants.NUM_LEVELS - 1))] != 0;
+    }
+
+    /**
+     * Marks every zombie type outside the retail id space as allowed for the current mode when its
+     * own definition row admits it into waves.
+     *
+     * <p>The per-mode fills ({@code Challenge::InitZombieWaves}, and the survival stage picker inside
+     * it) are retail data: they name retail zombie types. A type outside that table therefore cannot
+     * appear in them, and its absence is not a decision against it - it is gated by its own definition
+     * row instead ({@code mStartingLevel} was already checked by the caller, {@code mPickWeight} is
+     * the "takes part in waves" flag), which is the same rule {@link #canZombieSpawnOnLevel} applies
+     * in adventure mode.
+     */
+    private static void allowZombieTypesTheRetailListsCannotName(Board b) {
+        for (int aZombieType = ZombieType.NUM_ZOMBIE_TYPES; aZombieType < ZombieType.MAX_ZOMBIE_TYPES; aZombieType++) {
+            ZombieDefinition aZombieDef = Zombie.getZombieDefinition(aZombieType);
+            if (aZombieDef != null && aZombieDef.mPickWeight != 0) {
+                b.mZombieAllowed[aZombieType] = true;
+            }
+        }
     }
 
     // Board.cpp:2353
@@ -484,15 +491,17 @@ final class BoardWaves {
             aCount++;
         }
 
-        // Mod zombies that take part in waves rise from graves like the upstream ones; their weight
-        // is zeroed by the loop below whenever the level does not allow them.
-        for (CustomZombieType aCustom : ZombieTypeRegistry.all()) {
-            if (!aCustom.mWaveEnabled) {
+        // Zombie types outside the retail id space, when their definition row admits them into waves,
+        // rise from graves exactly like the retail ones: the loop below zeroes the weight of every
+        // type the current level does not allow.
+        for (int aZombieType = ZombieType.NUM_ZOMBIE_TYPES; aZombieType < ZombieType.MAX_ZOMBIE_TYPES; aZombieType++) {
+            ZombieDefinition aZombieDef = Zombie.getZombieDefinition(aZombieType);
+            if (aZombieDef == null || aZombieDef.mPickWeight == 0) {
                 continue;
             }
             aZombieWeightArray[aCount] = new PvzpWeightedArray();
-            aZombieWeightArray[aCount].mItem = aCustom.mZombieType;
-            aZombieWeightArray[aCount].mWeight = aCustom.mDefinition.mPickWeight;
+            aZombieWeightArray[aCount].mItem = aZombieType;
+            aZombieWeightArray[aCount].mWeight = aZombieDef.mPickWeight;
             aCount++;
         }
 
@@ -511,18 +520,15 @@ final class BoardWaves {
     // Board.cpp:2399
     static int pickZombieType(Board b, int theZombiePoints, int theWaveIndex, ZombiePicker theZombiePicker) {
         int aPickCount = 0;
-        // Sized by MAX_ZOMBIE_TYPES: mod zombies that take part in waves are appended after the
-        // upstream types (see ZombieTypeRegistry#isWaveEnabled).
         PvzpWeightedArray[] aZombieWeightArray = new PvzpWeightedArray[ZombieType.MAX_ZOMBIE_TYPES];
         for (int aZombieType = ZombieType.ZOMBIE_NORMAL; aZombieType < ZombieType.MAX_ZOMBIE_TYPES; aZombieType++) {
-            if (aZombieType >= ZombieType.NUM_ZOMBIE_TYPES && !ZombieTypeRegistry.isWaveEnabled(aZombieType)) {
+            ZombieDefinition aZombieDef = Zombie.getZombieDefinition(aZombieType);
+            if (aZombieDef == null) {
                 continue;
             }
             if (!b.mZombieAllowed[aZombieType]) {
                 continue;
             }
-
-            ZombieDefinition aZombieDef = Zombie.getZombieDefinition(aZombieType);
 
             // Exclude zombie types that fail the spawn restrictions or exceed the remaining points
             int aGameMode = b.mApp.mGameMode;

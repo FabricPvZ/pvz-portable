@@ -1,8 +1,12 @@
 package cn.enaium.fabricpvz.portable.contentmodfixture;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Optional;
 import java.util.TreeSet;
@@ -10,6 +14,7 @@ import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.ModContainer;
 import cn.enaium.fabricpvz.api.PvzFabricApi;
 import cn.enaium.fabricpvz.api.plant.PlantRegistry;
+import cn.enaium.fabricpvz.api.resource.ResourceOverrides;
 import cn.enaium.fabricpvz.api.zombie.ZombieRegistry;
 import cn.enaium.fabricpvz.portable.lawn.Board;
 import cn.enaium.fabricpvz.portable.lawn.GameMode;
@@ -30,6 +35,8 @@ import cn.enaium.fabricpvz.portable.pvzp.reanim.Reanimation;
 import cn.enaium.fabricpvz.portable.pvzp.reanim.ReanimationParams;
 import cn.enaium.fabricpvz.portable.pvzp.reanim.Reanimator;
 import cn.enaium.fabricpvz.portable.sexy.Common;
+import cn.enaium.fabricpvz.portable.sexy.pak.PakFileHandle;
+import cn.enaium.fabricpvz.portable.sexy.pak.PakInterface;
 import cn.enaium.fabricpvz.portable.test.HeadlessTestApp;
 
 /**
@@ -49,14 +56,17 @@ import cn.enaium.fabricpvz.portable.test.HeadlessTestApp;
  * <p>Phases:
  * <ol>
  *   <li>what the loader loaded: every mod id, the API version, the example mod and the fixture mod;</li>
- *   <li>the fixture mod's registrations and how the game's own tables and a headless board see them
- *       (no game assets needed);</li>
+ *   <li>the content fixture mod's registrations and how the game's own tables and a headless board
+ *       see them (no game assets needed; skipped when that mod is not installed);</li>
  *   <li>the mod Mixin: the example mod's {@code @Inject} into {@code LawnCommon.modInRange}, its
  *       {@code @Accessor} on {@code Board} and the gameplay hook chain the API installed;</li>
  *   <li>the real game: boots the actual entry point sequence against the installed assets, starts
  *       Adventure level 1 and asserts {@code SCENE_PLAYING}, then ticks the board to show the mod's
  *       board Mixin runs inside the real frame loop (skipped, and reported as such, when this
- *       machine has no game data).</li>
+ *       machine has no game data, or when {@code -Dpvz.test.skipGameBoot=true} asks for it);</li>
+ *   <li>the api-resource overrides a mod registered, read back through the engine's own
+ *       {@link PakInterface} with the retail {@code main.pak} mounted, next to a control resource no
+ *       registration shadows.</li>
  * </ol>
  */
 public final class ContentModGameMain {
@@ -68,6 +78,13 @@ public final class ContentModGameMain {
     private static final String RESDIR_ARGUMENT = "-resdir";
     /** Argument the test passes to name the writable directory. */
     private static final String SAVEDIR_ARGUMENT = "-savedir";
+
+    /**
+     * System property that tells the harness not to boot the real game. The resource-override run
+     * only needs the engine's reader with the pak mounted, and booting the game with the fixture's
+     * overrides in place would test the game's tolerance of them, not the override layer.
+     */
+    private static final String SKIP_GAME_BOOT_PROPERTY = "pvz.test.skipGameBoot";
 
     /** Class of the example mod jar that the test puts into {@code mods/}. */
     private static final String EXAMPLE_MOD = "cn.enaium.fabricpvz.examplemod.ExampleMod";
@@ -96,13 +113,21 @@ public final class ContentModGameMain {
         report("plantModuleLoaded", loader.isModLoaded("api-plant"));
         report("zombieModuleLoaded", loader.isModLoaded("api-zombie"));
         report("fixtureModLoaded", loader.isModLoaded(ContentMod.MOD_ID));
+        report("resourceModuleLoaded", loader.isModLoaded("api-resource"));
+        report("overrideModLoaded", loader.isModLoaded(ResourceOverrideMod.MOD_ID));
         report("apiInitialized", PvzFabricApi.isInitialized());
         report("apiVersion", PvzFabricApi.getVersion());
         flush(reportPath);
 
-        registrationPhase(reportPath);
+        // The plant/zombie phase reads the content fixture mod's state, so it only runs in a launch
+        // that installed it (the resource-override run installs its own fixture instead).
+        if (loader.isModLoaded(ContentMod.MOD_ID)) {
+            registrationPhase(reportPath);
+        }
+
         mixinAndEventPhase(reportPath);
         realGamePhase(reportPath, args);
+        resourceOverridePhase(reportPath);
 
         System.out.println("[loader-test-main] report written to " + reportPath);
     }
@@ -119,8 +144,8 @@ public final class ContentModGameMain {
         int type = ContentMod.bucketRunner.zombieType();
         report("plantSeedType", seed);
         report("zombieType", type);
-        report("seedOutsideUpstream", seed >= SeedType.CUSTOM_SEED_FIRST);
-        report("zombieOutsideUpstream", type >= ZombieType.CUSTOM_ZOMBIE_FIRST);
+        report("seedOutsideUpstream", seed >= SeedType.NUM_SEED_TYPES);
+        report("zombieOutsideUpstream", type >= ZombieType.NUM_ZOMBIE_TYPES);
 
         report("definitionCost", Plant.getPlantDefinition(seed).mSeedCost);
         report("definitionReanim", Plant.getPlantDefinition(seed).mReanimationType);
@@ -228,8 +253,10 @@ public final class ContentModGameMain {
     private static void realGamePhase(Path reportPath, String[] args) throws Exception {
         Optional<Path> assets = TestAssets.resourceRoot();
         report("assetsPresent", assets.isPresent());
+        boolean skipGameBoot = Boolean.getBoolean(SKIP_GAME_BOOT_PROPERTY);
+        report("gameBootSkipped", skipGameBoot);
 
-        if (assets.isEmpty()) {
+        if (assets.isEmpty() || skipGameBoot) {
             report("gameBooted", false);
             flush(reportPath);
             return;
@@ -302,6 +329,135 @@ public final class ContentModGameMain {
             LawnApp.gLawnApp = null;
             flush(reportPath);
         }
+    }
+
+    /**
+     * Phase 5: the {@code api-resource} overrides a mod registered are what the engine's own
+     * {@link PakInterface} hands out, and a resource no registration shadows still comes out of the
+     * mounted retail {@code main.pak}.
+     *
+     * <p>Every byte below comes from the engine's own {@code readResource} / {@code open} /
+     * {@code exists} - the entry points the game itself reads through - with the pak mounted exactly
+     * the way the game's boot mounts it (the real game phase already did it when it ran; the phase
+     * does it itself when the game boot was skipped). The overridden names are compared with the
+     * files this run was told to serve ({@value ResourceOverrideMod#FILE_OVERRIDE_PROPERTY} /
+     * {@value ResourceOverrideMod#ROOT_OVERRIDE_PROPERTY}), and every answer is hashed so the test
+     * side can compare it with the retail pak's members, which it reads itself.
+     */
+    private static void resourceOverridePhase(Path reportPath) throws Exception {
+        // Constructing the engine is what applies api-resource's Mixin (the game does the same at
+        // boot); report the installation only after that.
+        PakInterface engine = PakInterface.getInstance();
+        report("resourceOverridesInstalled", ResourceOverrides.installed());
+        report("overriddenNames", String.join(",", ResourceOverrides.overriddenNames()));
+        report("overriddenNameCount", ResourceOverrides.overriddenNames().size());
+        report("fileOverrideRegistered",
+                System.getProperty(ResourceOverrideMod.FILE_OVERRIDE_PROPERTY, "<unset>"));
+        report("rootOverrideRegistered",
+                System.getProperty(ResourceOverrideMod.ROOT_OVERRIDE_PROPERTY, "<unset>"));
+
+        // The retail pak, mounted the way the game's own boot mounts it: the resource folder is the
+        // installation and main.pak is added to the engine.
+        Optional<Path> assets = TestAssets.resourceRoot();
+        Path retailRoot = assets.orElse(null);
+        Path mainPak = retailRoot == null ? null : retailRoot.resolve("main.pak");
+        report("retailRoot", retailRoot);
+        boolean mounted = engine.resourceCount() > 0;
+
+        if (!mounted && mainPak != null && Files.isRegularFile(mainPak)) {
+            engine.setResourceFolder(retailRoot.toString());
+            mounted = engine.addPakFile(mainPak);
+        }
+
+        report("retailPakMounted", mounted);
+
+        // 1) addBytes: the text the mod carries in memory. It must come back byte for byte, readable
+        //    as the fixture's text, and not be a pak member - the override served it.
+        byte[] bytesRead = engine.readResource(ResourceOverrideMod.BYTES_RESOURCE);
+        report("bytesOverrideReadLength", bytesRead == null ? -1 : bytesRead.length);
+        report("bytesOverrideReadSha256", sha256(bytesRead));
+        report("bytesOverrideServed", equal(bytesRead, ResourceOverrideMod.lawnStringsBytes()));
+        report("bytesOverrideTextVisible", bytesRead != null && new String(bytesRead, StandardCharsets.UTF_8)
+                .contains(ResourceOverrideMod.LAWNSTRINGS_MARKER));
+        report("bytesOverrideFromPak", isPakMember(engine, ResourceOverrideMod.BYTES_RESOURCE));
+        report("bytesOverrideExists", engine.exists(ResourceOverrideMod.BYTES_RESOURCE));
+
+        // 2) addFile: the file the test wrote is the content of particles/pea_splats.png.
+        Path registeredFile = propertyPath(ResourceOverrideMod.FILE_OVERRIDE_PROPERTY);
+        byte[] expectedFile = readAll(registeredFile);
+        byte[] fileRead = engine.readResource(ResourceOverrideMod.FILE_RESOURCE);
+        report("fileOverrideExpectedLength", expectedFile == null ? -1 : expectedFile.length);
+        report("fileOverrideExpectedSha256", sha256(expectedFile));
+        report("fileOverrideReadLength", fileRead == null ? -1 : fileRead.length);
+        report("fileOverrideReadSha256", sha256(fileRead));
+        report("fileOverrideServed", equal(fileRead, expectedFile));
+        report("fileOverrideFromPak", isPakMember(engine, ResourceOverrideMod.FILE_RESOURCE));
+        report("fileOverrideExists", engine.exists(ResourceOverrideMod.FILE_RESOURCE));
+
+        // 3) addRoot: images/Almanac.png is not registered by name, only the directory that holds it.
+        Path registeredRoot = propertyPath(ResourceOverrideMod.ROOT_OVERRIDE_PROPERTY);
+        byte[] expectedImage = readAll(registeredRoot == null
+                ? null
+                : registeredRoot.resolve(ResourceOverrideMod.ROOT_RESOURCE));
+        byte[] imageRead = engine.readResource(ResourceOverrideMod.ROOT_RESOURCE);
+        report("rootOverrideExpectedLength", expectedImage == null ? -1 : expectedImage.length);
+        report("rootOverrideExpectedSha256", sha256(expectedImage));
+        report("rootOverrideReadLength", imageRead == null ? -1 : imageRead.length);
+        report("rootOverrideReadSha256", sha256(imageRead));
+        report("rootOverrideServed", equal(imageRead, expectedImage));
+        report("rootOverrideFromPak", isPakMember(engine, ResourceOverrideMod.ROOT_RESOURCE));
+        report("rootOverrideExists", engine.exists(ResourceOverrideMod.ROOT_RESOURCE));
+
+        // 4) The control: a retail resource no registration shadows. It must still be a pak member
+        //    read out of the mounted pak, and differ from all three overridden answers.
+        byte[] controlRead = engine.readResource(ResourceOverrideMod.CONTROL_RESOURCE);
+        report("controlReadLength", controlRead == null ? -1 : controlRead.length);
+        report("controlReadSha256", sha256(controlRead));
+        report("controlFromPak", isPakMember(engine, ResourceOverrideMod.CONTROL_RESOURCE));
+        report("controlExists", engine.exists(ResourceOverrideMod.CONTROL_RESOURCE));
+        report("controlDiffersFromOverrides", controlRead != null
+                && !equal(controlRead, bytesRead)
+                && !equal(controlRead, fileRead)
+                && !equal(controlRead, imageRead));
+
+        flush(reportPath);
+    }
+
+    /** The path a system property names, or {@code null} when it is unset or blank. */
+    private static Path propertyPath(String property) {
+        String value = System.getProperty(property, "");
+        return value.isBlank() ? null : Path.of(value);
+    }
+
+    private static byte[] readAll(Path theFile) {
+        if (theFile == null || !Files.isRegularFile(theFile)) {
+            return null;
+        }
+
+        try {
+            return Files.readAllBytes(theFile);
+        } catch (IOException anException) {
+            report("phaseError", theFile + ": " + anException);
+            return null;
+        }
+    }
+
+    /** Byte-for-byte equality: a {@code null} on either side is not a match. */
+    private static boolean equal(byte[] theLeft, byte[] theRight) {
+        return theLeft != null && theRight != null && MessageDigest.isEqual(theLeft, theRight);
+    }
+
+    /** Whether the engine resolves the name to a member of the mounted pak (the override's opposite). */
+    private static boolean isPakMember(PakInterface theEngine, String theName) throws IOException {
+        try (PakFileHandle handle = theEngine.open(theName, "rb")) {
+            return handle != null && handle.isPakMember();
+        }
+    }
+
+    private static String sha256(byte[] theData) throws Exception {
+        return theData == null
+                ? "<missing>"
+                : HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(theData));
     }
 
     /**

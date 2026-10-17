@@ -134,9 +134,10 @@ class PlantTest {
 
     @Test
     void definitionTableIsCompleteAndIndexAligned() {
-        assertEquals(NUM_PLANT_ROWS, Plant.gPlantDefs.length, "gPlantDefs has one row per plant SeedType");
+        assertEquals(SeedType.MAX_SEED_TYPES, Plant.gPlantDefs.length,
+                "the table is as wide as the seed-type id space");
 
-        for (int i = 0; i < Plant.gPlantDefs.length; i++) {
+        for (int i = 0; i < NUM_PLANT_ROWS; i++) {
             PlantDefinition aDef = Plant.gPlantDefs[i];
             assertNotNull(aDef, "row " + i);
             assertEquals(i, aDef.mSeedType, "row " + i + " must be self-identifying (Plant.cpp:4966 asserts this)");
@@ -146,6 +147,15 @@ class PlantTest {
             assertTrue(aDef.mReanimationType != ReanimationType.REANIM_NONE, "row " + i + " has a body reanim");
             assertTrue(aDef.mSubClass == PlantSubClass.SUBCLASS_NORMAL || aDef.mSubClass == PlantSubClass.SUBCLASS_SHOOTER);
         }
+
+        // Above the retail seed types the id space is free: a row nobody has written to is empty, and a
+        // lookup of one answers null instead of a definition (Plant#getPlantDefinition).
+        for (int i = NUM_PLANT_ROWS; i < Plant.gPlantDefs.length; i++) {
+            assertNull(Plant.gPlantDefs[i], "row " + i + " is free until something registers it");
+            assertNull(Plant.getPlantDefinition(i), "an empty row is not a definition");
+        }
+        assertNull(Plant.getPlantDefinition(SeedType.MAX_SEED_TYPES), "an id outside the id space has no row");
+        assertNull(Plant.getPlantDefinition(SeedType.SEED_NONE), "no negative id has a row");
     }
 
     @Test

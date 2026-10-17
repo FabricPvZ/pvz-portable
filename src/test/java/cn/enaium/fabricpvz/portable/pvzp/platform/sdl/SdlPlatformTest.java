@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 import org.lwjgl.sdl.SDLHints;
+import org.lwjgl.sdl.SDLVideo;
 import org.lwjgl.sdl.SDL_HintCallbackI;
 import org.lwjgl.system.MemoryUtil;
 import cn.enaium.fabricpvz.portable.lawn.LawnApp;
@@ -70,6 +71,83 @@ class SdlPlatformTest {
         int[] resized = SdlPlatform.eventWindowSize(1024, 768, 2048, 1536);
         assertEquals(1024, resized[0]);
         assertEquals(768, resized[1]);
+    }
+
+    /**
+     * The renderer's output size is what the geometry of a frame and a read-back of the window are
+     * measured against, and it is asked of the renderer rather than of the window: SDL's software
+     * renderer reports the window framebuffer surface it captured when it was created
+     * ({@code SW_GetOutputSize}), which is a different number from {@code SDL_GetWindowSizeInPixels}
+     * whenever it has not picked up a window resize. Compositing with the window size into the smaller
+     * surface clipped the frame and left a window dump with 815,640 untouched pixels (Linux/Wayland,
+     * an 800x600 surface in a 1464x885 window), and a read-back that does not cover the requested
+     * rectangle now refuses instead of leaving the rest of the destination untouched.
+     */
+    @Test
+    void theRendererOutputIsTheReadBackSizeAndAShortReadBackRefuses() {
+        SdlPlatform aPlatform = new SdlPlatform();
+        try {
+            aPlatform.init(new PlatformBackend.Options(320, 240, "renderer output test", false, false, false));
+            SdlRenderer aRenderer = aPlatform.createRenderer(320, 240, "software", false);
+
+            int aDrawableWidth;
+            int aDrawableHeight;
+            java.nio.IntBuffer aSizeA = MemoryUtil.memAllocInt(1);
+            java.nio.IntBuffer aSizeB = MemoryUtil.memAllocInt(1);
+            try {
+                assertTrue(SDLVideo.SDL_GetWindowSizeInPixels(aPlatform.windowHandle(), aSizeA, aSizeB));
+                aDrawableWidth = aSizeA.get(0);
+                aDrawableHeight = aSizeB.get(0);
+            } finally {
+                MemoryUtil.memFree(aSizeA);
+                MemoryUtil.memFree(aSizeB);
+            }
+            assertEquals(aDrawableWidth, aRenderer.presentedWidth(),
+                    "with the window settled, the renderer's output is the window's drawable");
+            assertEquals(aDrawableHeight, aRenderer.presentedHeight());
+            assertEquals(320, aRenderer.presentedWidth(), "the window is the size that was asked for");
+            assertEquals(240, aRenderer.presentedHeight());
+
+            int[] aPixels = new int[320 * 240];
+            assertEquals(320 * 240, aRenderer.readPresentedPixels(320, 240, aPixels));
+
+            // A rectangle the renderer's output does not cover is a refusal: a shorter read-back would
+            // silently leave the rest of the array at its initial value (which is how a stale software
+            // surface used to turn into a zero-filled window dump).
+            int[] aBigger = new int[400 * 300];
+            IllegalStateException aFailure = org.junit.jupiter.api.Assertions.assertThrows(
+                    IllegalStateException.class, () -> aRenderer.readPresentedPixels(400, 300, aBigger));
+            assertTrue(aFailure.getMessage().contains("320x240") && aFailure.getMessage().contains("400x300"),
+                    "the failure names both sizes: " + aFailure.getMessage());
+        } finally {
+            aPlatform.shutdown();
+        }
+    }
+
+    /**
+     * The window asks SDL for a high-density drawable: on a Retina display the frame is rendered at the
+     * display's real pixel resolution (an 800x600 canvas in a 1600x1200 drawable) and the renderer scales
+     * it once per frame, instead of the window server stretching an 800x600 frame
+     * ({@code SdlRenderer.sceneTarget()}).
+     *
+     * <p>Measured, not assumed: {@code SDL_GetWindowFlags} keeps the requested bit on both drivers this
+     * project runs under (the dummy driver the tests use and cocoa), so the flag can be asserted directly
+     * here. The bit itself is {@code SDL_WINDOW_HIGH_PIXEL_DENSITY = 0x2000}.
+     */
+    @Test
+    void theWindowAsksForAHighDensityDrawable() {
+        SdlPlatform aPlatform = new SdlPlatform();
+        try {
+            aPlatform.init(new PlatformBackend.Options(320, 240, "high density flag test", false, false, false));
+
+            long aWindow = aPlatform.windowHandle();
+            assertTrue(aWindow != 0, "init() creates the window");
+            long aFlags = SDLVideo.SDL_GetWindowFlags(aWindow);
+            assertTrue((aFlags & SDLVideo.SDL_WINDOW_HIGH_PIXEL_DENSITY) != 0,
+                    "SDL_GetWindowFlags must keep the high-density bit, flags=0x" + Long.toHexString(aFlags));
+        } finally {
+            aPlatform.shutdown();
+        }
     }
 
     /**

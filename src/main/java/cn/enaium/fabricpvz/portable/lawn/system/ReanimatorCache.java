@@ -38,6 +38,9 @@ import cn.enaium.fabricpvz.portable.pvzp.PvzpList;
 import cn.enaium.fabricpvz.portable.pvzp.PvzpListNode;
 import cn.enaium.fabricpvz.portable.pvzp.fx.FilterEffect;
 import cn.enaium.fabricpvz.portable.pvzp.reanim.Reanimation;
+import cn.enaium.fabricpvz.portable.pvzp.reanim.Reanimator;
+import cn.enaium.fabricpvz.portable.pvzp.reanim.ReanimatorDefinition;
+import cn.enaium.fabricpvz.portable.pvzp.reanim.ReanimatorTrack;
 import cn.enaium.fabricpvz.portable.sexy.Color;
 import cn.enaium.fabricpvz.portable.sexy.graphics.Graphics;
 import cn.enaium.fabricpvz.portable.sexy.graphics.MemoryImage;
@@ -343,12 +346,7 @@ public class ReanimatorCache {
             drawReanimatorFrame(aMemoryGraphics, -aOffsetX, -aOffsetY, aPlantDef.mReanimationType, "anim_idle",
                     theDrawVariation);
 
-            if (theSeedType == SeedType.SEED_PEASHOOTER || theSeedType == SeedType.SEED_SNOWPEA
-                    || theSeedType == SeedType.SEED_REPEATER || theSeedType == SeedType.SEED_LEFTPEATER
-                    || theSeedType == SeedType.SEED_GATLINGPEA) {
-                drawReanimatorFrame(aMemoryGraphics, -aOffsetX, -aOffsetY, aPlantDef.mReanimationType,
-                        "anim_head_idle", theDrawVariation);
-            } else if (theSeedType == SeedType.SEED_SPLITPEA) {
+            if (theSeedType == SeedType.SEED_SPLITPEA) {
                 drawReanimatorFrame(aMemoryGraphics, -aOffsetX, -aOffsetY, aPlantDef.mReanimationType,
                         "anim_head_idle", theDrawVariation);
                 drawReanimatorFrame(aMemoryGraphics, -aOffsetX, -aOffsetY, aPlantDef.mReanimationType,
@@ -360,10 +358,46 @@ public class ReanimatorCache {
                         "anim_head_idle3", theDrawVariation);
                 drawReanimatorFrame(aMemoryGraphics, -aOffsetX, -aOffsetY, aPlantDef.mReanimationType,
                         "anim_head_idle2", theDrawVariation);
+            } else if (trackExists(aPlantDef.mReanimationType, "anim_head_idle")) {
+                // PORT-NOTE: upstream lists the pea shooters here (peashooter, snow pea, repeater, left
+                // peater, gatling pea), i.e. exactly the plants whose body reanimation keeps the head on
+                // a separate anim_head_idle layer. Asking the reanimation instead of the seed type keeps
+                // that rule for every plant of the family, including one a registered seed type draws
+                // with - this cached frame is what a seed packet, the almanac picture and the cursor
+                // preview show, and the retail list left a registered peashooter headless in all three.
+                // The two seed types above keep their own extra layers.
+                drawReanimatorFrame(aMemoryGraphics, -aOffsetX, -aOffsetY, aPlantDef.mReanimationType,
+                        "anim_head_idle", theDrawVariation);
             }
         }
 
         return aMemoryImage;
+    }
+
+    /**
+     * @param theReanimationType a reanimation type
+     * @param theTrackName the track to look for
+     * @return whether the reanimation carries that track, i.e. whether drawing it is part of drawing the
+     *     plant (the definition is loaded on demand, like every other reader of it)
+     */
+    private static boolean trackExists(int theReanimationType, String theTrackName) {
+        Reanimator.reanimatorEnsureDefinitionLoaded(theReanimationType, false);
+        ReanimatorDefinition aDefinition = Reanimator.gReanimatorDefArray[theReanimationType];
+        if (aDefinition == null || aDefinition.mTracks == null) {
+            return false;
+        }
+
+        ReanimatorTrack[] aTracks = (ReanimatorTrack[]) aDefinition.mTracks.mArrayData;
+        if (aTracks == null) {
+            return false;
+        }
+
+        for (ReanimatorTrack aTrack : aTracks) {
+            if (theTrackName.equals(aTrack.mName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -490,7 +524,7 @@ public class ReanimatorCache {
      */
     public void drawCachedPlant(Graphics g, float thePosX, float thePosY, int theSeedType, int theDrawVariation) {
         // upstream PVZP_ASSERT(theSeedType >= 0 && theSeedType < SeedType::NUM_SEED_TYPES);
-        // widened to MAX_SEED_TYPES so mod plants get a cached packet image too
+        // widened to the seed-type id space (SeedType.MAX_SEED_TYPES): every seed type can be cached
         assert theSeedType >= 0 && theSeedType < SeedType.MAX_SEED_TYPES : theSeedType;
 
         MemoryImage aImage = null;
@@ -557,7 +591,7 @@ public class ReanimatorCache {
      */
     public void drawCachedZombie(Graphics g, float thePosX, float thePosY, int theZombieType) {
         // upstream PVZP_ASSERT(theZombieType >= 0 && theZombieType < ZombieType::NUM_CACHED_ZOMBIE_TYPES);
-        // widened to MAX_ZOMBIE_TYPES so mod zombies get a cached frame too
+        // widened to the zombie-type id space (ZombieType.MAX_ZOMBIE_TYPES): every type can be cached
         assert theZombieType >= 0 && theZombieType < ZombieType.MAX_ZOMBIE_TYPES : theZombieType;
 
         if (mZombieImages[theZombieType] == null) {

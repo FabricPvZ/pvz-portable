@@ -1,3 +1,14 @@
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardCopyOption
+import java.security.MessageDigest
+import java.time.Duration
+import java.util.HexFormat
+import java.util.zip.ZipFile
 import org.gradle.api.tasks.bundling.Jar
 import org.gradle.jvm.application.tasks.CreateStartScripts
 
@@ -8,15 +19,15 @@ plugins {
 }
 
 group = "cn.enaium.fabricpvz"
-// The game's version: 1.0.0, the version every artifact of this workspace carries (the loader, the
-// API, the toolchain and the mods are all 1.0.0 too - the port's own version is independent of the
-// upstream C++ project's tags). It is also the version a release reads (see the `printVersion` task)
+// The game's version: 1.1.0, the version every artifact of this workspace carries (the loader, the
+// API, the toolchain and the mods carry the same one - it is the workspace's release number, independent
+// of the upstream C++ project's tags). It is also the version a release reads (see the `printVersion` task)
 // and the name of the distribution zip (`pvz-portable-<version>.zip`).
-version = "1.0.0"
+version = "1.1.0"
 
 // The artifact's own name, matching the Maven artifactId (`cn.enaium.fabricpvz:pvz-portable`), the
-// distribution and the release asset: `build/libs/pvz-portable-1.0.0.jar`, `lib/pvz-portable-1.0.0.jar`
-// inside the zip, `~/.m2/repository/cn/enaium/fabricpvz/pvz-portable/1.0.0/pvz-portable-1.0.0.jar`.
+// distribution and the release asset: `build/libs/pvz-portable-1.1.0.jar`, `lib/pvz-portable-1.1.0.jar`
+// inside the zip, `~/.m2/repository/cn/enaium/fabricpvz/pvz-portable/1.1.0/pvz-portable-1.1.0.jar`.
 base {
     archivesName = "pvz-portable"
 }
@@ -51,86 +62,267 @@ val distributionNativePlatforms = listOf(
 
 val lwjglArtifacts = listOf("lwjgl", "lwjgl-sdl", "lwjgl-opengl", "lwjgl-openal", "lwjgl-stb", "lwjgl-nfd")
 
-// The example mod jar is resolved from mavenLocal and copied into build/testmods for the
-// end-to-end mod-loading test. It is deliberately NOT on the test classpath: mods load from the
-// mods directory exactly like they do in a real installation.
+// ------------------------------------------------------------------------------------------------
+// libopenmpt: the optional native MO3 decoder, shipped inside the distribution.
+//
+// The retail music is the only module audio the game has - sounds/MAINMUSIC.MO3 and
+// sounds/MAINMUSIC_HIHATS.MO3 of main.pak; every other piece of music and every sound effect is Ogg
+// Vorbis or AU and decoded in Java - and only libopenmpt decodes MO3. It stays an *optional*
+// dependency: the port probes the game directory's own native directory first and falls back to the
+// system library (Homebrew, apt, ...), so a machine without it keeps playing everything except the
+// MO3 music (see `OpenMptLibrary`).
+//
+// Upstream publishes compiled binaries for Windows only: lib.openmpt.org/libopenmpt/download lists
+// Windows arm64/amd64/x86 builds and, for every other operating system, "distribution packages".
+// This build therefore ships the two Windows builds and macOS/Linux keep the system lookup. The
+// archive below is the official development-libs package of the pinned release: it holds the
+// per-architecture DLLs (with the import libraries and headers, which the distribution does not
+// carry) and the OpenMPT licence.
+//
+// The five DLLs of a platform are one unit: libopenmpt.dll *statically* imports openmpt-mpg123.dll,
+// openmpt-vorbis.dll and openmpt-zlib.dll, and openmpt-vorbis.dll imports openmpt-ogg.dll. They stay
+// in the one directory of the platform - the port loads the satellites from there by absolute path
+// before loading libopenmpt.dll itself, which is what makes the packaged copy work on a machine
+// where nothing else puts that directory on the DLL search path.
+//
+// No binary is committed to git: the build downloads the pinned archive once into the Gradle user
+// home, verifies the archive's sha256 and the sha256 of every member it extracts, and stages what
+// the distribution and the development run carry. A build without network and without the cached
+// archive fails with the URL instead of silently producing a release zip without the libraries;
+// with the archive cached, `--offline` builds work.
+val libopenmptVersion = "0.8.9"
+val libopenmptArchiveName = "libopenmpt-$libopenmptVersion+release.dev.windows.vs2022.zip"
+val libopenmptArchiveUrl = "https://lib.openmpt.org/files/libopenmpt/dev/$libopenmptArchiveName"
+
+/** The sha256 of [libopenmptArchiveUrl]: the identity of the one download this build makes. */
+val libopenmptArchiveSha256 = "a23e375e576e3a6997ffeeb6cf34488e9020e2a5d8226856b02628b6a87c5e8e"
+
+/** The directory inside the archive each platform's DLLs come from. */
+val libopenmptArchiveDirectories = mapOf("windows-x64" to "bin/amd64", "windows-arm64" to "bin/arm64")
+
+/**
+ * What each platform directory of `lib/native/` carries, in load order (dependencies first), with
+ * the sha256 the extracted file has in the pinned archive. The archive's sha256 above pins the
+ * download; these pin what the build puts in the zip, and the distribution test asserts the zip's
+ * entries against them.
+ */
+val libopenmptLibraries = linkedMapOf(
+    "windows-x64" to linkedMapOf(
+        "libopenmpt.dll" to "9fa3131204f44a3b157f22f9f0ae11c5cccb5befa37e91a2476567aa0f4b0d94",
+        "openmpt-ogg.dll" to "bbeea26588404a00ae964f1c4aceb6d6474e5885f8337491a4c69e29e8516eb6",
+        "openmpt-mpg123.dll" to "f15edd24576d88fa08a153c4a7f9d9d7956449e4fc67758d660ad35d9e1696df",
+        "openmpt-vorbis.dll" to "7393d017e2930d57c12c016de21c6fa658f862481758ba394823f6ac5e013df2",
+        "openmpt-zlib.dll" to "966d96e9aaf5cbd9e1b600435af1180a3a643ace17a0e782a5becf378b25445b",
+    ),
+    "windows-arm64" to linkedMapOf(
+        "libopenmpt.dll" to "7449ebd96057b190c05faa9e38ca603c996c80447ce33052c0aad656bcfd7589",
+        "openmpt-ogg.dll" to "d12f41638db1fe6db35b75fa712c7e2ea3b247a3281e8bb85ecc3ffde0415fb4",
+        "openmpt-mpg123.dll" to "d1d389cbc3222e308e7eba17f27920367a4a7aceb8504c9322bbd052ddb53d87",
+        "openmpt-vorbis.dll" to "9e6c8c6fa4008fce530902c94cf3ea16d2d62fe0c059cd9444544a4c4f77d3a5",
+        "openmpt-zlib.dll" to "3f198cd630b6ec9b25310de5b5d407e2021d7d8a617beb5252cd1c1875f2b4b0",
+    ),
+)
+
+/** The sha256 of the archive's own `LICENSE.txt`, the licence the distribution carries. */
+val libopenmptLicenceSha256 = "2c999e99533c10a347916a72e075bacf10fcedeff793bd90d41d812b46161da2"
+
+/** The sha256 of a file, as the identity of what was downloaded and of what was extracted. */
+fun sha256Of(file: Path): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    Files.newInputStream(file).use { input ->
+        val buffer = ByteArray(8192)
+        while (true) {
+            val read = input.read(buffer)
+            if (read < 0) {
+                break
+            }
+            digest.update(buffer, 0, read)
+        }
+    }
+    return HexFormat.of().formatHex(digest.digest())
+}
+
+/**
+ * Makes sure the pinned archive is in [target] and returns whether it had to be downloaded. The
+ * download lands as a temporary file next to it and is moved into place only once it is complete,
+ * so an interrupted download never leaves a truncated archive behind (the same shape as the
+ * toolchain's own distribution download, `../loom`).
+ */
+fun fetchLibopenmptArchive(url: String, target: Path, offline: Boolean): Boolean {
+    if (Files.isRegularFile(target)) {
+        return false
+    }
+    if (offline) {
+        throw GradleException(
+            "libopenmpt $libopenmptVersion is not cached ($target) and Gradle runs with --offline, so" +
+                " the official release binaries cannot be downloaded. Run once without --offline (the" +
+                " archive is then cached for every later build), or download $url into that file by hand.",
+        )
+    }
+
+    Files.createDirectories(target.parent)
+    // Per-process temporary file: two builds of the workspace may fetch the same archive at once.
+    val temporary = target.resolveSibling(target.fileName.toString() + ".part-" + ProcessHandle.current().pid())
+    Files.deleteIfExists(temporary)
+    try {
+        val client = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(30))
+            .build()
+        val request = HttpRequest.newBuilder(URI.create(url))
+            .header("User-Agent", "pvz-portable/" + project.version)
+            .timeout(Duration.ofMinutes(5))
+            .GET()
+            .build()
+        val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
+        if (response.statusCode() != 200) {
+            response.body().use { it.readNBytes(256) }
+            throw GradleException("HTTP ${response.statusCode()}")
+        }
+        response.body().use { body -> Files.newOutputStream(temporary).use { body.copyTo(it) } }
+        Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING)
+    } catch (exception: Exception) {
+        Files.deleteIfExists(temporary)
+        throw GradleException(
+            "Cannot download $url into $target: ${exception.message}. The native libopenmpt" +
+                " libraries are part of the distribution, so this build fails instead of producing a" +
+                " release zip without them.",
+            exception,
+        )
+    }
+    return true
+}
+
+// The staged `lib/native/` of the distribution and of the development run. Its layout is the
+// distribution's: the platform directories, the licence and a manifest naming the archive every
+// file comes from.
+val libopenmptNativeStage = layout.buildDirectory.dir("libopenmpt-native")
+
+val libopenmptNatives = tasks.register("libopenmptNatives") {
+    group = "distribution"
+    description = "Downloads the pinned official libopenmpt binaries (sha256-verified) and stages lib/native/."
+    val archive = gradle.gradleUserHomeDir.resolve("caches/pvz/libopenmpt").resolve(libopenmptArchiveName)
+    // The archive in the Gradle user home is an implicit input; the two properties below are the
+    // version and the hash, i.e. what changes when the pin changes.
+    inputs.property("libopenmptVersion", libopenmptVersion)
+    inputs.property("libopenmptArchiveSha256", libopenmptArchiveSha256)
+    outputs.dir(libopenmptNativeStage)
+
+    doLast {
+        val target = libopenmptNativeStage.get().asFile
+        if (fetchLibopenmptArchive(libopenmptArchiveUrl, archive.toPath(), gradle.startParameter.isOffline)) {
+            logger.lifecycle(
+                "libopenmpt {}: downloaded {} from {}", libopenmptVersion, libopenmptArchiveName, libopenmptArchiveUrl,
+            )
+        }
+
+        val archiveSha256 = sha256Of(archive.toPath())
+        if (!archiveSha256.equals(libopenmptArchiveSha256, ignoreCase = true)) {
+            // A wrong hash means the cached file is not the archive this build pinned (an interrupted
+            // download that somehow moved into place, a partial copy, or a changed upstream file):
+            // drop it and say so, instead of packaging something else under the pinned identity.
+            archive.delete()
+            throw GradleException(
+                "libopenmpt $libopenmptVersion: $archive has sha256 $archiveSha256 instead of the pinned" +
+                    " $libopenmptArchiveSha256. The file was deleted; a build with network downloads" +
+                    " $libopenmptArchiveUrl again.",
+            )
+        }
+
+        target.deleteRecursively()
+        Files.createDirectories(target.toPath())
+        val members = StringBuilder()
+        ZipFile(archive).use { zip ->
+            for ((platform, libraries) in libopenmptLibraries) {
+                val archiveDirectory = libopenmptArchiveDirectories.getValue(platform)
+                val platformDirectory = target.resolve(platform)
+                Files.createDirectories(platformDirectory.toPath())
+                for ((name, expected) in libraries) {
+                    val entry = zip.getEntry("$archiveDirectory/$name")
+                        ?: throw GradleException(
+                            "libopenmpt $libopenmptVersion: $libopenmptArchiveName carries no $archiveDirectory/$name.",
+                        )
+                    zip.getInputStream(entry).use { input ->
+                        Files.newOutputStream(platformDirectory.resolve(name).toPath()).use { input.copyTo(it) }
+                    }
+                    val sha256 = sha256Of(platformDirectory.resolve(name).toPath())
+                    if (!sha256.equals(expected, ignoreCase = true)) {
+                        throw GradleException(
+                            "libopenmpt $libopenmptVersion: $archiveDirectory/$name was extracted with" +
+                                " sha256 $sha256 instead of the pinned $expected.",
+                        )
+                    }
+                    members.append(platform).append(' ').append(name).append(' ').append(sha256).append('\n')
+                }
+            }
+
+            val licence = zip.getEntry("LICENSE.txt")
+                ?: throw GradleException("libopenmpt $libopenmptVersion: $libopenmptArchiveName carries no LICENSE.txt.")
+            zip.getInputStream(licence).use { input ->
+                Files.newOutputStream(target.resolve("libopenmpt-LICENSE.txt").toPath()).use { input.copyTo(it) }
+            }
+        }
+
+        val licenceSha256 = sha256Of(target.resolve("libopenmpt-LICENSE.txt").toPath())
+        if (!licenceSha256.equals(libopenmptLicenceSha256, ignoreCase = true)) {
+            throw GradleException(
+                "libopenmpt $libopenmptVersion: the licence was extracted with sha256 $licenceSha256" +
+                    " instead of the pinned $libopenmptLicenceSha256.",
+            )
+        }
+
+        Files.writeString(
+            target.resolve("libopenmpt-natives.txt").toPath(),
+            "libopenmpt " + libopenmptVersion + "\n" +
+                "url=" + libopenmptArchiveUrl + "\n" +
+                "archive-sha256=" + libopenmptArchiveSha256 + "\n" +
+                "# Windows binaries only: upstream publishes no macOS or Linux binaries (see" +
+                " lib.openmpt.org/libopenmpt/download, where every other operating system is" +
+                " \"distribution packages\"), so those platforms use the system library.\n" +
+                "# platform file sha256\n" +
+                members,
+        )
+        logger.lifecycle(
+            "libopenmpt {}: staged {} ({} files, {} platforms)",
+            libopenmptVersion,
+            target,
+            libopenmptLibraries.values.sumOf { it.size } + 2,
+            libopenmptLibraries.size,
+        )
+    }
+}
+
+// The mods the loader end-to-end test (FabricLoaderEndToEndTest) finds in a real mods/ directory:
+// this workspace's API as one mod and the example mod. Both are resolved from mavenLocal and copied
+// into build/testmods by [testModsJar] below. Deliberately NOT on the test classpath: mods load from
+// the mods directory exactly like they do in a real installation.
 val modsForTest by configurations.creating
+
+// The API release this project's tests are written against, published to mavenLocal like every other
+// artifact this build consumes. Changing the API means publishing it again before this project's
+// tests can see the change:
+//
+//     (cd ../fabric-api && ./gradlew publishToMavenLocal)
+//
+// This project is standalone: the API arrives as a repository coordinate, never as a file of a
+// sibling checkout, and this build copies nothing into the game directory's mods/.
+val apiVersion = "1.2.0"
 
 // The API is a *mod* of the game directory, and never a dependency of this project.
 //
 // Fabric parity is why it cannot be one: fabric-api depends on this game in turn (its event types
-// are typed against the game's classes), so the two projects cannot depend on each other. More to the
-// point, the loader only ever gets the API from the `mods/` directory of the game directory it
-// launches on, exactly like it gets every mod a player installs - so a dependency here would be the
-// wrong shape even if the cycle allowed it. The API's jars are therefore plain files of this
-// workspace's own build of it (`../fabric-api/build/libs/`) and not a resolvable configuration: a
-// configuration would hand `javac` the classes (`testCompileOnly`) while telling the loader nothing,
-// it would let the coordinate resolve from mavenLocal while the run had no jar to load, and a missing
-// API build would surface as a hundred "cannot find symbol" errors instead of the command that fixes
-// it (see [checkApiJars]).
-//
-// Two shapes of the same artifacts are needed, and they are not interchangeable:
+// are typed against the game's classes), so the two projects cannot depend on each other. It is
+// consumed in two shapes, and they are not interchangeable:
 //  * the aggregator, `cn.enaium.fabricpvz:fabric-api` (`fabric-api-<version>.jar`), is the whole API
-//    as **one mod**: its four feature modules sit inside it as `META-INF/jars/*.jar` and the loader
-//    loads them from there. This is the jar that goes into a `mods/` directory (the dev `run` and the
-//    game dir of an installation alike), and the only API jar a player ever copies ([apiModJars]);
-//  * the four feature modules (`api-base`, `api-events`, `api-plant`, `api-zombie`) are what `javac`
-//    needs ([apiModuleJars]): a class inside a nested jar is not on a compile class path, so the test
-//    fixtures - the only sources of this project that import `cn.enaium.fabricpvz.api.*` - compile
-//    against the modules themselves.
-val fabricApiDir = File(rootDir.parentFile, "fabric-api")
-
-/** The API as one mod: a jar for a `mods/` directory, never for a class path. */
-val apiModJars = fileTree(File(fabricApiDir, "build/libs")) {
-    include("fabric-api-*.jar")
-    exclude("*-sources.jar", "*-javadoc.jar")
-}
-
-/** The four feature modules: for `javac` only (see above). */
-val apiModuleJars = fileTree(fabricApiDir) {
-    include("api-*/build/libs/api-*.jar")
-    exclude("**/*-sources.jar", "**/*-javadoc.jar")
-}
-
-/** The four modules the API is made of, for the check below and for the failure message. */
-val apiModuleNames = listOf("api-base", "api-events", "api-plant", "api-zombie")
-
-/**
- * Fails with the command that fixes a missing API build, instead of a failure further down that says
- * nothing about the cause: `javac` reporting every API type the fixtures import as an unknown package,
- * a `Sync` with nothing to copy (which Gradle skips as `NO-SOURCE`), or a loader that cannot find the
- * dependency of every mod it just read from `run/mods/`. `mods/` is where the loader reads mods from,
- * so there is nothing here to resolve on demand - the API has to have been built.
- */
-fun checkApiJars(modJars: Collection<File>, moduleJars: Collection<File>) {
-    val missing = when {
-        modJars.isEmpty() -> "the aggregate jar fabric-api-<version>.jar"
-        moduleJars.size != apiModuleNames.size -> "the module jars " + apiModuleNames.joinToString(", ")
-        else -> return
-    }
-
-    throw GradleException(
-        "The API is not built: ${fabricApiDir.absolutePath} does not contain $missing. This project uses " +
-            "the API as a mod - a jar installed into a `mods/` directory and never a dependency - so it does " +
-            "not resolve it from a repository:\n" +
-            "    (cd ../fabric-api && ./gradlew build)\n" +
-            "    # that build needs this project's POM in mavenLocal: ./gradlew publishToMavenLocal -x test\n" +
-            "README.md §3 has the whole order."
-    )
-}
-
-/**
- * The check as a task: the copy tasks below cannot carry it themselves, because Gradle skips a task
- * with no source as `NO-SOURCE` before any of its actions run - which is exactly the case a missing
- * API jar would create.
- */
-val checkApiBuilt = tasks.register("checkApiBuilt") {
-    group = "verification"
-    description = "Fails when the API has not been built in this workspace (see apiModJars)."
-    // The API's jars are this task's inputs, so rebuilding or removing one re-runs the check.
-    inputs.files(apiModJars, apiModuleJars).withPropertyName("apiJars")
-    doLast { checkApiJars(apiModJars.files, apiModuleJars.files) }
-}
+//    as **one mod**: its five feature modules sit inside it as `META-INF/jars/*.jar` and the loader
+//    loads them from there. This is the jar a `mods/` directory takes - the loader end-to-end test
+//    installs it into build/testmods through `modsForTest` above - and the only API jar a player
+//    ever copies into an installation's `mods/`;
+//  * the five feature modules (`api-base`, `api-events`, `api-plant`, `api-resource`, `api-zombie`)
+//    are what `javac` needs, because a class inside a nested jar is not on a compile class path: the
+//    test fixtures - the only sources of this project that import `cn.enaium.fabricpvz.api.*` -
+//    compile against the modules themselves (see `testCompileOnly` below), and against nothing else.
+val apiModules = listOf("api-base", "api-events", "api-plant", "api-resource", "api-zombie")
 
 dependencies {
     // The game's own output goes through the SLF4J API (see Common.LOGGER_NAME): the ported
@@ -161,23 +353,28 @@ dependencies {
     // directory's mods/ before invoking the game's main class. The provider artifact publishes the
     // loader, Mixin and ASM as runtime dependencies (exactly the library set of the loader's own
     // manifest), so it is the only launch dependency the game needs.
-    runtimeOnly("cn.enaium.fabricpvz:fabric-provider:1.0.0")
+    runtimeOnly("cn.enaium.fabricpvz:fabric-provider:1.1.0")
 
     // The game's main sources are Fabric-free; its test fixtures are mods, so they compile against
     // the loader (ModInitializer) and query it (FabricLoader facade) when they run.
     testImplementation(libs.fabric.loader)
 
     // Fabric parity: fabric-api depends on this game (its events are typed against it), so it is not
-    // a dependency of this project in either direction - it is a mod, loaded from `mods/` (see
-    // [apiModJars] above). The fixtures (`src/test/java/.../contentmodfixture/`) are mods in
-    // disguise and import the API's public types, so their *compilation* gets the API's four feature
-    // modules as plain files of the API build in this workspace - compile-only, and deliberately not
-    // `testRuntimeOnly`: nothing of the test class path may carry the API, because the game has to
-    // find it exactly where a player's installation keeps it, in the mods directory the loader reads
-    // ([testModsJar] below for the loader test, [installApiMod] for the dev run).
-    testCompileOnly(apiModuleJars)
+    // a dependency of this project in either direction - it is a mod, consumed in the two shapes
+    // described above. The fixtures (`src/test/java/.../contentmodfixture/`) are mods in disguise and
+    // import the API's public types, so their *compilation* gets the API's five feature modules from
+    // mavenLocal - compile-only, and deliberately not `testRuntimeOnly`: nothing of the test class
+    // path may carry the API, because the game has to find it exactly where a player's installation
+    // keeps it, in the mods directory the loader reads ([testModsJar] below).
+    apiModules.forEach { testCompileOnly("cn.enaium.fabricpvz:$it:$apiVersion") }
 
-    modsForTest("cn.enaium.fabricpvz:pvz-example-mod:1.0.0")
+    // The API as one mod and the example mod: the mods the loader end-to-end test loads from the
+    // real mods/ directory [testModsJar] builds below. The aggregate jar is the whole API - its five
+    // feature modules are nested inside it and the loader loads them from there - so its POM's
+    // compile dependencies on those five modules must not drag five further jars next to it: a
+    // `mods/` directory takes the aggregate and nothing else of the API.
+    modsForTest("cn.enaium.fabricpvz:fabric-api:$apiVersion") { isTransitive = false }
+    modsForTest("cn.enaium.fabricpvz:pvz-example-mod:1.1.0")
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
@@ -186,17 +383,14 @@ dependencies {
 
 val testModsDir = layout.buildDirectory.dir("testmods")
 
-// The mods the loader end-to-end test finds in a real `mods/` directory: the example mod (resolved
-// from mavenLocal, see `modsForTest` above) and the API's aggregate jar (built in this workspace, see
-// [apiModJars]). One `Sync` for both, because `build/testmods` is Gradle's own directory: two syncs
-// into it would prune each other's jars. The test reads the directory through the `pvz.test.modsDir`
-// system property the test task sets below.
+// The mods the loader end-to-end test finds in a real `mods/` directory: the API's aggregate jar and
+// the example mod, both resolved from mavenLocal (`modsForTest` above). One `Sync`, because
+// `build/testmods` is Gradle's own directory: two syncs into it would prune each other's jars. The
+// test reads the directory through the `pvz.test.modsDir` system property the test task sets below.
 val testModsJar = tasks.register<Sync>("testModsJar") {
     group = "verification"
     description = "Installs the mods the loader end-to-end test loads into build/testmods."
-    dependsOn(checkApiBuilt)
     from(configurations.named("modsForTest"))
-    from(apiModJars)
     into(testModsDir)
 }
 
@@ -206,7 +400,7 @@ application {
     // main class. `run` and the distribution therefore launch the same entry point, in the same
     // order, and the distribution's `bin/pvz-portable` script is just that launch without Gradle.
     mainClass = "net.fabricmc.loader.impl.launch.knot.KnotClient"
-    // The dist directory (and the script names) inside the zip: `pvz-portable-1.0.0/bin/pvz-portable`.
+    // The dist directory (and the script names) inside the zip: `pvz-portable-1.1.0/bin/pvz-portable`.
     applicationName = "pvz-portable"
     applicationDefaultJvmArgs = listOf(
         // LWJGL uses JNI; JDK 25 warns (and future JDKs refuse) unless native access is enabled.
@@ -224,6 +418,20 @@ application {
     // Windows. It goes into the generated unix script behind a platform test instead (see the
     // startScripts task below), which is the only place available: the script launches on the
     // machine it runs on, the distribution is built on one machine only.
+}
+
+// The packaged native libraries (`lib/native/`) are part of the distribution's content, so `distZip`
+// and `installDist` carry them, and unzipping is one step: `lib/` next to `bin/` already holds them.
+// They are *not* on the runtime class path - the port loads them from the game directory itself
+// (see `OpenMptLibrary`), which is also why they are the same directory in the development run.
+distributions {
+    getByName("main") {
+        contents {
+            from(libopenmptNatives) {
+                into("lib/native")
+            }
+        }
+    }
 }
 
 // The distribution: `bin/` start scripts (from the application plugin, generated from the runtime
@@ -322,14 +530,6 @@ tasks.withType<JavaCompile>().configureEach {
     options.release = 25
 }
 
-// The fixtures are the only sources here that import the API (`contentmodfixture/`), and they get it
-// through plain files, so nothing would fail on its own if the API had not been built: `javac` would
-// report every `cn.enaium.fabricpvz.api` import as an unknown package, which says nothing about the
-// cause. Check first, compile after.
-tasks.named<JavaCompile>("compileTestJava") {
-    dependsOn(checkApiBuilt)
-}
-
 // The game jar describes itself: the loader reports the game's version through the provider
 // (fabric-provider), so this manifest is what a human or a tool reading the artifact - the jar inside
 // the release zip, or the one published as cn.enaium.fabricpvz:pvz-portable:<version> - sees.
@@ -353,6 +553,14 @@ tasks.withType<Test>().configureEach {
     // which forks a second JVM and starts Fabric Loader's KnotClient with this test class path - the
     // class path itself carries neither of them.
     systemProperty("pvz.test.modsDir", testModsDir.get().asFile.absolutePath)
+    // The distribution test asserts what the release zip carries - the packaged native libopenmpt
+    // libraries of every platform, by entry name and sha256 - so the zip is built before the tests
+    // run, and its path is passed in (the test does not guess the version's file name).
+    dependsOn(tasks.named("distZip"))
+    systemProperty(
+        "pvz.test.distribution",
+        tasks.named<Zip>("distZip").flatMap { it.archiveFile }.get().asFile.absolutePath,
+    )
     // LWJGL uses JNI; JDK 25 warns unless native access is enabled explicitly.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     // SDL on macOS needs the first thread; the dummy video driver keeps window creation headless.
@@ -504,45 +712,32 @@ tasks.register<Copy>("syncDevResources") {
     }
 }
 
-// Installs the API into the game directory's mods/ directory, so that `./gradlew run` gets the API
-// the way an installation does: a jar the loader discovers in `mods/`, never a jar on the class path.
-//
-// A `Copy` and not a `Sync` - and this is the one place this project differs from what a mod project's
-// `pvzModsJar` does with its own `run/`: `run/mods/` is a real game directory's mods directory, so it
-// also holds the mods a developer installed by hand (run/ is in .gitignore; the workspace keeps e.g.
-// the speed mod or a Kotlin language adapter there). A `Sync` would delete every jar it did not put
-// there itself. What a `Sync` is wanted for here is only its pruning of *the API's own* previous
-// jars, so a version bump does not leave two `fabric-api-*.jar` files - two mods with one id - in the
-// directory; that is done below, by name, and nothing else in run/mods/ is touched.
+// The development run's game directory, and the one place this script points at it. `run/mods/` is a
+// real game directory's mods directory: what the loader loads from there is what the player (or the
+// developer) put there by hand. This build installs nothing into it - `run` is the game, and the mods
+// of a run are the mods of a run, exactly as in an installation.
 val devRunDir = layout.projectDirectory.dir("run")
 
-val installApiMod = tasks.register<Copy>("installApiMod") {
-    group = "application"
-    description = "Copies the built API jar into run/mods, where Fabric Loader reads mods from."
-    dependsOn(checkApiBuilt)
-    from(apiModJars)
-    into(devRunDir.dir("mods"))
-    doLast {
-        val installed = apiModJars.files.map { it.name }.toSet()
-        val stale = devRunDir.dir("mods").asFile
-            .listFiles { file -> file.name.endsWith(".jar") && file.name.startsWith("fabric-api-") && file.name !in installed }
-            .orEmpty()
-
-        for (jar in stale) {
-            jar.delete()
-            logger.lifecycle("installApiMod: removed the previous API jar ${jar.name}")
-        }
-    }
+// The development game directory carries the packaged native libraries at the same relative path the
+// distribution uses (`run/lib/native/<os>-<arch>/`), so a dev run resolves libopenmpt exactly like an
+// unpacked release does: from the packaged directory when it holds one for this platform, from the
+// system library otherwise. `run` is the one game directory the driver tasks below share.
+val libopenmptRunNatives = tasks.register<Sync>("libopenmptRunNatives") {
+    group = "distribution"
+    description = "Stages the packaged native libopenmpt libraries in the development game directory."
+    from(libopenmptNatives)
+    into(devRunDir.dir("lib/native"))
 }
 
 tasks.named<JavaExec>("run") {
     workingDir = devRunDir.asFile
+    // The packaged native libraries of every platform this build ships, under run/lib/native/ (see
+    // libopenmptRunNatives above): a dev run and an unpacked release have the same game directory
+    // layout.
+    dependsOn(libopenmptRunNatives)
     // Create the working directory on demand (it holds userdata/, mods/ and, optionally, the assets
     // synced by :syncDevResources).
     doFirst { workingDir.mkdirs() }
-    // The API, in run/mods/ before the loader starts (see `installApiMod` above): the API is a mod,
-    // and a mod the game directory does not contain is a mod the loader does not load.
-    dependsOn(installApiMod)
     // The game directory; Fabric Loader reads mods/ from it (the launcher's KnotClient is the main
     // class, see `application` above).
     jvmArgs("-Dpvz.gameDir=${devRunDir.asFile.absolutePath}")
@@ -550,9 +745,8 @@ tasks.named<JavaExec>("run") {
     // detection pass over the class path.
     jvmArgs("-Dfabric.skipMcProvider=true")
     // A development run: Fabric Loader reports a development environment and also discovers mods that
-    // sit on the class path, exactly like the mods' own `./gradlew runClient` (`../loom/`). It is no
-    // longer what gives this run an API - the API is a jar in run/mods/, which is where a player's
-    // installation keeps it too.
+    // sit on the class path, exactly like the mods' own `./gradlew runClient` (`../loom/`). The mods
+    // this run loads are the ones in run/mods/ - the same place a player's installation keeps them.
     jvmArgs("-Dfabric.development=true")
     jvmArgs("--enable-native-access=ALL-UNNAMED")
     // SDL on macOS requires the JVM's main thread to own the first thread.
@@ -569,7 +763,7 @@ publishing {
             from(components["java"])
             groupId = "cn.enaium.fabricpvz"
             artifactId = "pvz-portable"
-            // The project version (1.0.0): one value for the jar, the POM and the distribution, so a
+            // The project version (1.1.0): one value for the jar, the POM and the distribution, so a
             // consumer of `cn.enaium.fabricpvz:pvz-portable:<version>` gets exactly the release zip's
             // game jar.
             version = project.version.toString()

@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -223,6 +224,55 @@ class OpenAlSoundManagerTest {
 
                 assertFalse(voice.isPlaying());
                 assertTrue(voice.mAutoRelease, "stopAllSounds saves and restores autoRelease");
+            }
+        }
+    }
+
+    @Test
+    void loadsAUlawFileThroughTheProbeChain(@TempDir Path dir) throws IOException {
+        byte[] ulaw = {(byte) 0xFF, 0x7F, (byte) 0x80, 0x00};
+        Files.write(dir.resolve("diamond.au"), TestAudio.auUlaw(8012, 1, ulaw));
+
+        try (OpenAlDevice device = new OpenAlDevice()) {
+            Assumptions.assumeTrue(device.available(), "no audio device available");
+
+            PakInterface pak = new PakInterface();
+            pak.setResourceFolder(dir.toString());
+
+            try (OpenAlSoundManager manager = new OpenAlSoundManager(pak, device)) {
+                // The manifest name has no extension; only sounds/diamond.au exists, so the probe has
+                // to reach the ".au" candidate and sniff it as AU (SDLSoundManager.cpp:281-305).
+                assertTrue(manager.loadSound(0, "diamond"));
+                assertEquals(1, manager.getNumSounds());
+                assertEquals("diamond.au", manager.mSourceSounds[0].mFileName);
+                assertEquals(8012, manager.mSourceSounds[0].mSampleRate);
+                assertEquals(1, manager.mSourceSounds[0].mChannels);
+                assertEquals(4, manager.mSourceSounds[0].mFrames);
+                assertNotNull(manager.getSoundInstance(0));
+            }
+        }
+    }
+
+    @Test
+    void skipsAnUnrecognizedContainerButStillFailsOnAMissingAsset(@TempDir Path dir) throws IOException {
+        Files.write(dir.resolve("weird.wav"), "not an audio container".getBytes(StandardCharsets.ISO_8859_1));
+
+        try (OpenAlDevice device = new OpenAlDevice()) {
+            Assumptions.assumeTrue(device.available(), "no audio device available");
+
+            PakInterface pak = new PakInterface();
+            pak.setResourceFolder(dir.toString());
+
+            try (OpenAlSoundManager manager = new OpenAlSoundManager(pak, device)) {
+                // The asset exists but no decoder can read it: logged and skipped, the loading thread
+                // must not abort (docs/VERIFICATION.md §59).
+                assertTrue(manager.loadSound(0, "weird"), "an undecodable asset is skipped, not fatal");
+                assertNull(manager.mSourceSounds[0]);
+                assertEquals(0, manager.getNumSounds());
+
+                // Nothing on disk at all: still the hard failure that ResourceManager reports.
+                assertFalse(manager.loadSound(1, "absent"), "a missing asset must keep failing");
+                assertEquals("absent", manager.mSourceFileNames[1]);
             }
         }
     }

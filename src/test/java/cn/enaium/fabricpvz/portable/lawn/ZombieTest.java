@@ -15,6 +15,7 @@ package cn.enaium.fabricpvz.portable.lawn;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -140,7 +141,8 @@ class ZombieTest {
 
     @Test
     void definitionTableHasEveryZombieTypeInOrder() {
-        assertEquals(ZombieType.NUM_ZOMBIE_TYPES, Zombie.gZombieDefs.length);
+        assertEquals(ZombieType.MAX_ZOMBIE_TYPES, Zombie.gZombieDefs.length,
+                "the table is as wide as the zombie-type id space");
         for (int i = 0; i < ZombieType.NUM_ZOMBIE_TYPES; i++) {
             ZombieDefinition def = Zombie.gZombieDefs[i];
             assertNotNull(def);
@@ -149,6 +151,15 @@ class ZombieTest {
             assertNotNull(def.mZombieName);
             assertFalse(def.mZombieName.isEmpty());
         }
+
+        // Above the retail types the id space is free: a row nobody has written to is empty, and a
+        // lookup of one answers null instead of a definition (Zombie#getZombieDefinition).
+        for (int i = ZombieType.NUM_ZOMBIE_TYPES; i < Zombie.gZombieDefs.length; i++) {
+            assertNull(Zombie.gZombieDefs[i], "row " + i + " is free until something registers it");
+            assertNull(Zombie.getZombieDefinition(i), "an empty row is not a definition");
+        }
+        assertNull(Zombie.getZombieDefinition(ZombieType.MAX_ZOMBIE_TYPES), "an id outside the id space has no row");
+        assertNull(Zombie.getZombieDefinition(ZombieType.ZOMBIE_INVALID), "no negative id has a row");
     }
 
     @Test

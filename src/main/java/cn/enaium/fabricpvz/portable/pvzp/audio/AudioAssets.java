@@ -29,7 +29,7 @@ final class AudioAssets {
      */
     static final String[] PROBE_EXTENSIONS = {".wav", ".mp3", ".ogg", ".mo3", ".au", ""};
 
-    /** A resource that was found and whose content is a recognizable audio container. */
+    /** A resource that was found and whose content has been sniffed (format may be {@link AudioFormat#UNKNOWN}). */
     record Loaded(String name, byte[] data, AudioFormat format) {
     }
 
@@ -37,8 +37,14 @@ final class AudioAssets {
     }
 
     /**
-     * Reads every probe candidate that exists and is recognized, in probe order; the caller decodes
-     * them in order and keeps the first success. Empty when nothing was found.
+     * Reads every probe candidate that exists, in probe order; the caller decodes them in order and
+     * keeps the first success. Empty when nothing was found.
+     *
+     * <p>Candidates whose container is not recognized are returned with
+     * {@link AudioFormat#UNKNOWN} instead of being dropped, so a caller can tell an asset that is not
+     * there at all (empty list) from one that is there but not decodable by this port — the loading
+     * thread reports the former as a missing resource and only logs the latter
+     * (docs/VERIFICATION.md §59).
      */
     static List<Loaded> readAll(PakInterface pakInterface, String fileName) throws IOException {
         List<Loaded> found = new ArrayList<>();
@@ -47,11 +53,7 @@ final class AudioAssets {
             if (data == null || data.length == 0) {
                 continue;
             }
-            AudioFormat format = AudioFormat.sniff(data);
-            if (format == AudioFormat.UNKNOWN) {
-                continue;
-            }
-            found.add(new Loaded(fileName + extension, data, format));
+            found.add(new Loaded(fileName + extension, data, AudioFormat.sniff(data)));
         }
         return found;
     }

@@ -92,20 +92,80 @@ public final class PakSource implements AutoCloseable {
         }
     }
 
-    /** Case-insensitive existence probe used while mounting paks (upstream uses fcaseopen). */
+    /**
+     * Resolves a file-system path the way upstream's {@code fcaseopen} does: <em>every</em> component
+     * that is not there as spelled is folded to the spelling the directory actually holds, so
+     * {@code Properties/ZombatarTOS.txt} finds {@code properties/ZombatarTOS.txt} on a file system
+     * that distinguishes case (upstream {@code fcaseopen.c:68-130} walks the path component by
+     * component with {@code strcasecmp}).
+     *
+     * <p>This is the one funnel for resources that live as plain files rather than as pak members
+     * ({@link PakInterface#open}, {@link PakInterface#exists}, {@link PakInterface#addPakFile},
+     * {@code DataReader.openFile}, the legacy font descriptor read), which is why the fold has to
+     * cover directories too: the retail layout spells the resource directory {@code properties} in
+     * lower case while the game asks for {@code Properties/...}, and macOS/Windows hide that
+     * mismatch by not distinguishing case at all.
+     *
+     * <p>PORT-NOTE: upstream keeps an unresolved component verbatim and lets the open fail; this
+     * returns {@code null} instead, and refuses a component that matches more than one entry (upstream
+     * takes the first {@code readdir} match, i.e. an arbitrary one of two spellings of the same name).
+     *
+     * @return {@code path} itself when it is there as spelled (the only case on a case-insensitive
+     *         file system), the path with its components folded when every one of them resolves, or
+     *         {@code null} when some component does not.
+     */
     public static Path resolveCaseInsensitive(Path path) throws IOException {
+        return resolveCaseInsensitive(path, PakSource::listDirectory);
+    }
+
+    /**
+     * {@link #resolveCaseInsensitive(Path)} against a caller-supplied directory listing: the seam that
+     * makes the fold testable on a host whose file system is case-insensitive (a test can then drive
+     * the fold with a listing that only holds the exact spellings).
+     */
+    static Path resolveCaseInsensitive(Path path, DirectoryListing listing) throws IOException {
         if (Files.exists(path)) {
             return path;
         }
-        Path parent = path.toAbsolutePath().getParent();
-        if (parent == null || !Files.isDirectory(parent)) {
+        Path name = path.getFileName();
+        if (name == null) {
+            return null; // a root: there is nothing left to fold
+        }
+        Path parent = path.getParent();
+        if (parent == null) {
+            parent = Path.of(""); // a single relative name: the working directory
+        }
+        Path resolvedParent = Files.exists(parent) ? parent : resolveCaseInsensitive(parent, listing);
+        if (resolvedParent == null) {
             return null;
         }
-        String wanted = path.getFileName().toString();
+        List<Path> entries = listing.list(resolvedParent);
+        if (entries == null) {
+            return null; // not a directory
+        }
+        String wanted = name.toString();
         List<Path> matches = new ArrayList<>();
-        try (var stream = Files.list(parent)) {
-            stream.filter(p -> p.getFileName().toString().equalsIgnoreCase(wanted)).forEach(matches::add);
+        for (Path entry : entries) {
+            if (entry.getFileName().toString().equalsIgnoreCase(wanted)) {
+                matches.add(entry);
+            }
         }
         return matches.size() == 1 ? matches.get(0) : null;
+    }
+
+    /** Entries of {@code directory} in any order, or {@code null} when it is not a directory. */
+    @FunctionalInterface
+    interface DirectoryListing {
+        List<Path> list(Path directory) throws IOException;
+    }
+
+    /** {@link DirectoryListing} over the real file system. */
+    private static List<Path> listDirectory(Path directory) throws IOException {
+        if (!Files.isDirectory(directory)) {
+            return null;
+        }
+        try (var stream = Files.list(directory)) {
+            return stream.toList();
+        }
     }
 }

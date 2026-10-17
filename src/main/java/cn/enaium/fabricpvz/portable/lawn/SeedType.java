@@ -85,23 +85,16 @@ public final class SeedType {
     public static final int SEED_NONE = -1;
 
     /**
-     * First seed type mods may allocate.
+     * Size of the seed-type id space, i.e. the width of every table a seed type indexes.
      *
-     * <p>Everything below it is upstream: {@code 0..NUM_SEED_TYPES-1} are the plants of the almanac
-     * and {@code NUM_SEED_TYPES..74} the mini-game seeds (beghouled buttons, slot machine,
-     * zombiquarium, I, Zombie). Ids from here on are handed out by
-     * {@link cn.enaium.fabricpvz.portable.lawn.content.PlantTypeRegistry} and are never used by the
-     * upstream tables or by {@code switch} statements, so mod content can never collide with them.
-     */
-    public static final int CUSTOM_SEED_FIRST = 100;
-
-    /**
-     * Size of every seed-type-indexed table (upstream rows plus the mod window).
-     *
-     * <p>Tables stay index-aligned with {@link #CUSTOM_SEED_FIRST}: slot {@code n} of a
-     * {@code MAX_SEED_TYPES}-wide array holds the data of seed type {@code n}. With an empty
-     * {@link cn.enaium.fabricpvz.portable.lawn.content.PlantTypeRegistry} the extra slots are simply
-     * never read, so an unmodded game behaves exactly like upstream.
+     * <p>Rows stay index-aligned: slot {@code n} of a {@code MAX_SEED_TYPES}-wide array holds the
+     * data of seed type {@code n}, whatever {@code n} is. The seed types the retail game ships are
+     * the ones below {@link #NUM_SEED_TYPES} (plant definitions) and the mini-game seeds up to
+     * {@code 74}; the id space is wider than they need because the definition tables are meant to be
+     * written to at runtime: {@code Plant#gPlantDefs} is as wide as this constant, its retail rows are
+     * the definitions below, and a seed type whose row is still empty ({@code null}) is simply one
+     * nobody has defined. Every reader of the table copes with empty rows, so a table nothing has
+     * written to behaves exactly like the retail one.
      */
     public static final int MAX_SEED_TYPES = 200;
 

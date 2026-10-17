@@ -633,9 +633,15 @@ public final class ZombieStatus {
             }
         }
 
-        Zombie aZombie = z.mBoard.zombieTryToGet(z.mRelatedZombieID);
-        if (aZombie != null && !aZombie.mDead) {
-            dieNoLoot(aZombie);
+        // PORT-NOTE: upstream already guards mBoard for the plant above (Zombie.cpp:7402, "null check
+        // added for safety") but still dereferences it here (Zombie.cpp:7412), so the almanac's
+        // board-less bungee preview (AlmanacDialog.cpp:164) crashes on the way out of the dialog.
+        // Without a board there is no dropped zombie to kill.
+        if (z.mBoard != null) {
+            Zombie aZombie = z.mBoard.zombieTryToGet(z.mRelatedZombieID);
+            if (aZombie != null && !aZombie.mDead) {
+                dieNoLoot(aZombie);
+            }
         }
     }
 

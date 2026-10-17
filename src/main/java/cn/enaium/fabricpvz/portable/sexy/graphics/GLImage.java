@@ -167,6 +167,13 @@ public class GLImage extends MemoryImage {
      * the bits when there is no backend or the image is the screen target, and otherwise forces the
      * upload via {@link #ensureTexture(MemoryImage)} before purging, so a never-drawn
      * {@code GLImage} (the ResourceManager {@code nobits} path) is not blanked.
+     *
+     * <p>PORT-NOTE: a static texture can neither be drawn into nor read back (SDL refuses to bind it
+     * as a read source), so it cannot stand in for dropped CPU bits. After the upload, the base class
+     * is therefore only allowed to drop the bits for a draw target ({@link #mRenderTarget}) or for an
+     * image that has a file for {@code getBits()} to re-decode from; otherwise the bits are kept, the
+     * same "upstream never loses pixels" doctrine {@code MemoryImage.purgeBits} applies when it has no
+     * render data and no file.
      */
     @Override
     public void purgeBits() {
@@ -182,6 +189,11 @@ public class GLImage extends MemoryImage {
 
         // The texture must own the pixels before the CPU copy is dropped.
         ensureTexture(this);
+        if (!mRenderTarget && (mFilePath == null || mFilePath.isEmpty())) {
+            // Nothing can hand the pixels back: a static texture cannot be read back and there is no
+            // file to re-decode from, so dropping the bits would lose them for good.
+            return;
+        }
         super.purgeBits();
     }
 
@@ -195,10 +207,16 @@ public class GLImage extends MemoryImage {
      *
      * <p>This must not bump {@link #mBitsChangedCount}/{@link #mBitsChanged}, otherwise
      * {@link #ensureTexture(MemoryImage)} would re-upload in a loop.
+     *
+     * <p>PORT-NOTE: the read-back is only taken for an image whose texture can really be bound as a
+     * read source, i.e. a draw target ({@link #mRenderTarget}). SDL refuses to bind an ordinary static
+     * texture for a read-back, so for everything else the branch falls through to
+     * {@code super.getBits()}, which re-decodes from {@link Image#mFilePath} or hands out a fresh
+     * buffer - never another target's pixels.
      */
     @Override
     public int[] getBits() {
-        if (mBits == null && mRenderData != 0 && backend() != null
+        if (mBits == null && mRenderData != 0 && mRenderTarget && backend() != null
                 && mRenderDataBitsChangedCount == mBitsChangedCount) {
             int aSize = mWidth * mHeight;
             mBits = new int[aSize + 1];

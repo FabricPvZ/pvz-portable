@@ -344,29 +344,36 @@ public final class ZombieRender {
         drawBungeeCord(z, g, -22);
         aBodyReanim.draw(g);
 
-        Zombie aDroppedZombie = z.mBoard.zombieTryToGet(z.mRelatedZombieID);
-        if (aDroppedZombie != null) {
-            Graphics aDropGraphics = new Graphics(g);
-            aDropGraphics.mTransY -= z.mAltitude;
-            aDropGraphics.mTransX += aDroppedZombie.mPosX - z.mPosX;
+        // PORT-NOTE: upstream reads mBoard unconditionally here (Zombie.cpp:5543/5557), but the almanac
+        // builds its preview zombie with a null board (AlmanacDialog.cpp:164, mirrored at
+        // AlmanacDialog.java:220), so upstream dereferences null the moment the bungee entry is
+        // opened. The board-driven dropped-zombie/plant overlay is skipped without a board; the cord,
+        // body and arms (drawn above and below this block) are identical to upstream.
+        if (z.mBoard != null) {
+            Zombie aDroppedZombie = z.mBoard.zombieTryToGet(z.mRelatedZombieID);
+            if (aDroppedZombie != null) {
+                Graphics aDropGraphics = new Graphics(g);
+                aDropGraphics.mTransY -= z.mAltitude;
+                aDropGraphics.mTransX += aDroppedZombie.mPosX - z.mPosX;
 
-            ZombieDrawPosition aDroppedDrawPos = getDrawPos(aDroppedZombie);
-            drawReanim(aDroppedZombie, aDropGraphics, aDroppedDrawPos, Reanimation.RENDER_GROUP_NORMAL);
-        } else {
-            Plant aPlant = z.mBoard.mPlants.dataArrayTryToGet(z.mTargetPlantID);
-            if (aPlant != null) {
-                Graphics aPlantGraphics = new Graphics(g);
-                aPlantGraphics.mTransY += 30.0f - z.mAltitude;
-                if (z.mZombiePhase == ZombiePhase.PHASE_BUNGEE_RISING) {
-                    if (aPlant.mSeedType == SeedType.SEED_SPIKEWEED || aPlant.mSeedType == SeedType.SEED_SPIKEROCK) {
-                        aPlantGraphics.mTransY -= 34.0f;
+                ZombieDrawPosition aDroppedDrawPos = getDrawPos(aDroppedZombie);
+                drawReanim(aDroppedZombie, aDropGraphics, aDroppedDrawPos, Reanimation.RENDER_GROUP_NORMAL);
+            } else {
+                Plant aPlant = z.mBoard.mPlants.dataArrayTryToGet(z.mTargetPlantID);
+                if (aPlant != null) {
+                    Graphics aPlantGraphics = new Graphics(g);
+                    aPlantGraphics.mTransY += 30.0f - z.mAltitude;
+                    if (z.mZombiePhase == ZombiePhase.PHASE_BUNGEE_RISING) {
+                        if (aPlant.mSeedType == SeedType.SEED_SPIKEWEED || aPlant.mSeedType == SeedType.SEED_SPIKEROCK) {
+                            aPlantGraphics.mTransY -= 34.0f;
+                        }
                     }
-                }
-                if (aPlant.mPlantCol <= 4 && z.mBoard.stageHasRoof()) {
-                    aPlantGraphics.mTransY += 10;
-                }
+                    if (aPlant.mPlantCol <= 4 && z.mBoard.stageHasRoof()) {
+                        aPlantGraphics.mTransY += 10;
+                    }
 
-                aPlant.draw(aPlantGraphics);
+                    aPlant.draw(aPlantGraphics);
+                }
             }
         }
 

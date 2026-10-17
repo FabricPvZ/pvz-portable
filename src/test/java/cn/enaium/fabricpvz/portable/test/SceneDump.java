@@ -25,17 +25,24 @@ import cn.enaium.fabricpvz.portable.lawn.Board;
 import cn.enaium.fabricpvz.portable.lawn.Coin;
 import cn.enaium.fabricpvz.portable.lawn.CoinMotion;
 import cn.enaium.fabricpvz.portable.lawn.CoinType;
+import cn.enaium.fabricpvz.portable.lawn.AlmanacPage;
+import cn.enaium.fabricpvz.portable.lawn.CursorType;
+import cn.enaium.fabricpvz.portable.lawn.Dialogs;
 import cn.enaium.fabricpvz.portable.lawn.CutScene;
 import cn.enaium.fabricpvz.portable.lawn.DamageFlags;
 import cn.enaium.fabricpvz.portable.lawn.LawnMower;
 import cn.enaium.fabricpvz.portable.lawn.ParticleEffect;
 import cn.enaium.fabricpvz.portable.lawn.Plant;
+import cn.enaium.fabricpvz.portable.lawn.PlantDefinition;
+import cn.enaium.fabricpvz.portable.lawn.PlantSubClass;
+import cn.enaium.fabricpvz.portable.lawn.ReanimationType;
 import cn.enaium.fabricpvz.portable.lawn.RenderLayer;
 import cn.enaium.fabricpvz.portable.lawn.SeedBank;
 import cn.enaium.fabricpvz.portable.lawn.SeedPacket;
 import cn.enaium.fabricpvz.portable.lawn.SeedType;
 import cn.enaium.fabricpvz.portable.lawn.StoreItem;
 import cn.enaium.fabricpvz.portable.lawn.widget.AlmanacDialog;
+import cn.enaium.fabricpvz.portable.lawn.widget.ChosenSeed;
 import cn.enaium.fabricpvz.portable.pvzp.reanim.Attachment;
 import cn.enaium.fabricpvz.portable.pvzp.reanim.Reanimation;
 import cn.enaium.fabricpvz.portable.sexy.Point;
@@ -53,6 +60,13 @@ import cn.enaium.fabricpvz.portable.lawn.ZombieType;
  */
 public final class SceneDump {
 
+    /**
+     * Seed type the {@code chooser} scenario registers above the retail range: the game-side half of a
+     * mod registration (a definition row in {@link Plant#gPlantDefs}, plus the {@code HasSeedType} the
+     * app below answers for it, which the mod API answers through its own mixin).
+     */
+    private static final int CHOOSER_SEED_TYPE = 100;
+
     private final LawnApp mApp;
     private final Path mDumpDir;
     private int[] mBaseline;
@@ -62,6 +76,14 @@ public final class SceneDump {
         mDumpDir = theDumpDir;
     }
 
+    /** The app of the {@code chooser} and {@code cursorPreview} scenarios, which knows the seed type above. */
+    static final class ChooserDumpApp extends LawnApp {
+        @Override
+        public boolean hasSeedType(int theSeedType) {
+            return theSeedType == CHOOSER_SEED_TYPE || super.hasSeedType(theSeedType);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
         String scenario = System.getProperty("pvz.dump.scenario", "graveRise");
         Path dumpDir = Path.of("build", "scene-dump", scenario).toAbsolutePath();
@@ -69,7 +91,8 @@ public final class SceneDump {
         Files.createDirectories(saveDir);
 
         Main.installHooks();
-        LawnApp app = new LawnApp();
+        LawnApp app = scenario.equals("chooser") || scenario.equals("cursorPreview")
+                || scenario.equals("almanac") ? new ChooserDumpApp() : new LawnApp();
         LawnApp.gLawnApp = app;
         SceneDump dump = new SceneDump(app, dumpDir);
         try {
@@ -84,8 +107,11 @@ public final class SceneDump {
             app.loadingCompleted();
 
             // 11 is 2-1 (the grave level), 26 is 3-6, the level the zomboni is introduced in
-            // (ZombieDefinition.mStartingLevel = 26, Zombie.cpp:93).
-            int level = scenario.equals("graveRise") ? 11 : scenario.equals("zomboni") ? 26 : 1;
+            // (ZombieDefinition.mStartingLevel = 26, Zombie.cpp:93), 2 is 1-2, the first level that
+            // offers the seed chooser: a first-time adventure profile only chooses its seeds from 1-8 on
+            // (Board::ChooseSeedsOnCurrentLevel, Board.cpp:1620).
+            int level = scenario.equals("graveRise") ? 11 : scenario.equals("zomboni") ? 26
+                    : scenario.equals("chooser") ? 9 : 1;
             if (app.mPlayerInfo == null) {
                 app.mPlayerInfo = app.mProfileMgr.addProfile("SceneDump");
             }
@@ -103,6 +129,15 @@ public final class SceneDump {
                 // needs both, so it plays the intro at the game's own pace and only supplies the two
                 // player interactions ("Let's Rock" and the clicks on Crazy Dave's dialog).
                 dump.playIntro(app);
+            } else if (scenario.equals("chooser")) {
+                // The scene to dump *is* the seed chooser, so this scenario drives the intro itself
+                // (dump.chooser) instead of skipping to SCENE_PLAYING like the scenes below.
+            } else if (scenario.equals("almanac")) {
+                // The almanac is a dialog over a live board (dump.almanac), so this scenario needs a
+                // playing board too.
+            } else if (scenario.equals("cursorPreview")) {
+                // This one needs a playing board too, and puts a registered plant in the cursor itself
+                // (dump.cursorPreview).
             } else {
                 app.startPlaying();
                 // Fast-forward the level intro exactly like CutScene does when it is skipped: the board
@@ -130,12 +165,154 @@ public final class SceneDump {
                 case "packet" -> dump.packet();
                 case "packetbg" -> dump.packetbg();
                 case "zomboni" -> dump.zomboni();
+                case "chooser" -> dump.chooser();
+                case "cursorPreview" -> dump.cursorPreview();
+                case "almanac" -> dump.almanac();
                 default -> throw new IllegalArgumentException("unknown scenario " + scenario);
             }
         } finally {
             app.shutdown();
             LawnApp.gLawnApp = null;
         }
+    }
+
+    /**
+     * The seed chooser with a seed type above the retail range on it: page 0 is the retail grid and the
+     * arrow next to "Let's Rock" brings the page that holds the registered seed type on screen.
+     *
+     * <p>The registration here is the game-side half of a mod registration - a definition row in the
+     * table the game reads ({@link Plant#gPlantDefs}) plus the availability the dump app answers for
+     * that seed type, which a game with the mod API answers through the API's mixin - so the scenario
+     * shows the port's page control without needing a mod loader. The intro is played (not skipped)
+     * because the chooser only exists while the level is choosing its seeds, and Crazy Dave's dialog
+     * has to be clicked through to get there.
+     */
+    private void chooser() throws Exception {
+        Plant.gPlantDefs[CHOOSER_SEED_TYPE] = new PlantDefinition(CHOOSER_SEED_TYPE, null,
+                ReanimationType.REANIM_PEASHOOTER, 0, 175, 750, PlantSubClass.SUBCLASS_SHOOTER, 150,
+                "CHOOSER_DUMP_PLANT");
+
+        // Reach SCENE_PLAYING so the chooser has a live board under it, then put the chooser up the way
+        // CutScene::StartSeedChooser does: the screen itself (LawnApp::ShowSeedChooserScreen, which
+        // adds it to the widget manager) plus the flag the board reads while the level waits for it
+        // (CutScene::StartSeedChooser, CutScene.cpp:1132).
+        mApp.startPlaying();
+        for (int i = 0; i < 3; i++) {
+            tick();
+        }
+        // Past the intro's preloading window: SeedChooserScreen::Draw returns while the cutscene is
+        // before it (SeedChooserScreen.cpp:335-343), i.e. while CutScene::IsBeforePreloading() holds
+        // because the intro we skipped never preloaded.
+        mApp.mBoard.mCutScene.mCutsceneTime = 100000;
+        mApp.mBoard.mCutScene.mPreloaded = true;
+        for (int i = 0; i < 5; i++) {
+            tick();
+        }
+        mApp.showSeedChooserScreen();
+        mApp.mBoard.mCutScene.mSeedChoosing = true;
+        // CutScene::Update brings the chooser to the front on every frame while the level chooses its
+        // seeds (CutScene.cpp:1323); the intro this scenario skips is what runs that, and without it
+        // the board widget - added before the chooser - draws over it.
+        mApp.mWidgetManager.bringToFront(mApp.mSeedChooserScreen);
+        System.out.println("[chooser] pages=" + mApp.mSeedChooserScreen.mNumPages);
+
+        for (int i = 0; i < 30; i++) {
+            tick();
+        }
+        save(capture("page-0"), "page-0");
+
+        mApp.mSeedChooserScreen.switchPage(1);
+        for (int i = 0; i < 10; i++) {
+            tick();
+        }
+        ChosenSeed aSeed = mApp.mSeedChooserScreen.mChosenSeeds[CHOOSER_SEED_TYPE];
+        System.out.println("[chooser] page=" + mApp.mSeedChooserScreen.mPage + " seed=" + aSeed.mSeedType
+                + " at=" + aSeed.mX + "," + aSeed.mY);
+        save(capture("page-1"), "page-1");
+    }
+
+    /**
+     * The plant the mouse carries while a seed is selected - the cursor preview - for a seed type that
+     * {@link ChooserDumpApp} registers above the retail range. The preview is drawn from the game's
+     * cached plant frame, and this is the scene that shows whether that frame has the plant's head:
+     * before the fix the frame cache drew the separate {@code anim_head_idle} layer only for the game's
+     * own pea shooters, so a registered one was drawn headless here (docs/VERIFICATION.md §48).
+     */
+    private void cursorPreview() throws Exception {
+        Plant.gPlantDefs[CHOOSER_SEED_TYPE] = new PlantDefinition(CHOOSER_SEED_TYPE, null,
+                ReanimationType.REANIM_PEASHOOTER, 0, 175, 750, PlantSubClass.SUBCLASS_SHOOTER, 150,
+                "CURSOR_DUMP_PLANT");
+
+        mApp.startPlaying();
+        for (int i = 0; i < 8; i++) {
+            tick();
+        }
+
+        // A seed in the cursor over a plantable square of the first column, which is what makes the
+        // preview visible (CursorPreview::Update, CursorObject.cpp:238-276).
+        mApp.mBoard.mCursorObject.mCursorType = CursorType.CURSOR_TYPE_PLANT_FROM_BANK;
+        mApp.mBoard.mCursorObject.mType = CHOOSER_SEED_TYPE;
+        mApp.mBoard.mCursorObject.mImitaterType = SeedType.SEED_NONE;
+        mApp.mWidgetManager.mLastMouseX = mApp.mBoard.gridToPixelX(1, 2) + 40;
+        mApp.mWidgetManager.mLastMouseY = mApp.mBoard.gridToPixelY(1, 2) + 40;
+
+        for (int i = 0; i < 20; i++) {
+            tick();
+        }
+        System.out.println("[cursorPreview] visible=" + mApp.mBoard.mCursorPreview.mVisible
+                + " seed=" + mApp.mBoard.getSeedTypeInCursor()
+                + " at=" + mApp.mBoard.mCursorPreview.mX + "," + mApp.mBoard.mCursorPreview.mY);
+        save(capture("preview"), "preview");
+    }
+
+    /**
+     * The almanac's plant page with a seed type {@link ChooserDumpApp} registers above the retail range:
+     * page 0 is the retail grid, the arrow next to the page buttons brings the page that holds the
+     * registered plant on screen and selecting it shows its name and description from the mod
+     * (docs/VERIFICATION.md §47).
+     */
+    private void almanac() throws Exception {
+        Plant.gPlantDefs[CHOOSER_SEED_TYPE] = new PlantDefinition(CHOOSER_SEED_TYPE, null,
+                ReanimationType.REANIM_PEASHOOTER, 0, 175, 750, PlantSubClass.SUBCLASS_SHOOTER, 150,
+                "ALMANAC_DUMP_PLANT");
+
+        mApp.startPlaying();
+        for (int i = 0; i < 8; i++) {
+            tick();
+        }
+
+        mApp.doAlmanacDialog(SeedType.SEED_NONE, ZombieType.ZOMBIE_INVALID);
+        AlmanacDialog aAlmanac = (AlmanacDialog) mApp.getDialog(Dialogs.DIALOG_ALMANAC);
+        if (aAlmanac == null) {
+            throw new IllegalStateException("the almanac did not open");
+        }
+
+        // The dialog opens on the index page; the scene to dump is the plant grid.
+        aAlmanac.setPage(AlmanacPage.ALMANAC_PAGE_PLANTS);
+        for (int i = 0; i < 10; i++) {
+            tick();
+        }
+        System.out.println("[almanac] page=" + aAlmanac.mPlantPage + " pages=" + aAlmanac.mPlantNumPages);
+        save(capture("plants-page-0"), "plants-page-0");
+
+        aAlmanac.switchPlantPage(1);
+        aAlmanac.showPlant(CHOOSER_SEED_TYPE);
+        for (int i = 0; i < 6; i++) {
+            tick();
+        }
+        System.out.println("[almanac] page=" + aAlmanac.mPlantPage
+                + " slot0=" + aAlmanac.plantSlotSeedType(0)
+                + " selected=" + aAlmanac.mSelectedSeed);
+        save(capture("plants-page-1"), "plants-page-1");
+
+        // The same page with a *retail* plant selected, as the control for the portrait above.
+        aAlmanac.showPlant(SeedType.SEED_PEASHOOTER);
+        for (int i = 0; i < 6; i++) {
+            tick();
+        }
+        save(capture("plants-retail"), "plants-retail");
+
+        mApp.killAlmanacDialog();
     }
 
     // ---------------------------------------------------------------------------------------

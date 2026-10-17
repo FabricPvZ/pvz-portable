@@ -3,8 +3,9 @@ package cn.enaium.fabricpvz.portable.sexy;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
+
+import cn.enaium.fabricpvz.portable.sexy.pak.PakSource;
 
 /**
  * Ported from src/Lawn/System/DataSync.h:28-45 and src/Lawn/System/DataSync.cpp:32-175.
@@ -40,7 +41,11 @@ public class DataReader {
         mDataPos = 0;
         close();
         try {
-            mFile = new RandomAccessFile(resolveCaseInsensitive(theFileName).toFile(), "r");
+            // Upstream opens through fcaseopen, i.e. with every path component folded to the spelling
+            // the file system holds; the pak interface owns that fold (PakSource.resolveCaseInsensitive),
+            // so this does not carry a second, narrower copy of it.
+            Path aResolved = PakSource.resolveCaseInsensitive(Path.of(theFileName));
+            mFile = aResolved == null ? null : new RandomAccessFile(aResolved.toFile(), "r");
         } catch (IOException e) {
             mFile = null;
         }
@@ -166,29 +171,5 @@ public class DataReader {
     /** Current cursor position (memory buffer only; mirrors upstream {@code mDataPos}). */
     public int getDataPos() {
         return mDataPos;
-    }
-
-    /** Upstream {@code DataReader} opens through {@code fcaseopen}; resolve the same way on POSIX. */
-    private static Path resolveCaseInsensitive(String theFileName) {
-        Path path = Path.of(theFileName);
-        if (Files.exists(path)) {
-            return path;
-        }
-        Path parent = path.getParent();
-        String name = path.getFileName() == null ? "" : path.getFileName().toString();
-        if (parent == null) {
-            parent = Path.of(".");
-        }
-        if (Files.isDirectory(parent)) {
-            try (var children = Files.list(parent)) {
-                return children
-                        .filter(p -> p.getFileName().toString().equalsIgnoreCase(name))
-                        .findFirst()
-                        .orElse(path);
-            } catch (IOException ignored) {
-                // Fall through to the literal path.
-            }
-        }
-        return path;
     }
 }
