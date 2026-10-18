@@ -15,18 +15,29 @@ import java.io.File
  * existing assets are untouched.
  *
  * The file's name carries the version id - `pvz-portable-<version>` - so it sits next to vanilla's
- * indexes without ever colliding with one of them. Its url is never fetched for the reason above:
- * it exists so the json is a complete asset index declaration, and a launcher only goes to it if the
- * installed file is missing or does not match the sha1/size below (in which case a port without any
- * asset objects has nothing better to offer anyway).
+ * indexes without ever colliding with one of them.
+ *
+ * <p>The url is the repository's copy of those 14 bytes
+ * ({@code launcher/empty-asset-index.json}), because a launcher *does* fetch it whenever the
+ * installation has no local file or a mismatching one: a hand-unpacked installation (the documented
+ * way of installing the version package) has no {@code assets/indexes/} entry until something writes
+ * it, and the first version of this declaration pointed at a placeholder host, so HMCL's pre-launch
+ * download step failed and the launch never happened. The checksum and size below are what a
+ * launcher compares its copy against - either copy is byte-for-byte this content.
  */
 object PvzAssetIndex {
 
     /** The index's content, exactly: `{"objects":{}}`, 14 bytes, no trailing newline. */
     const val CONTENT = """{"objects":{}}"""
 
-    /** The address the json names. Never fetched: the file `installMcVersion` writes matches it. */
-    const val URL = "https://example.invalid/empty-asset-index.json"
+    /**
+     * The address the json names: this repository's own copy of the 14 bytes, at a path that exists
+     * as soon as the repository is published. Not a release asset (a release attaches the two
+     * packages and nothing else) and not a tag-pinned path (a build has to name a URL that resolves
+     * before its own tag exists).
+     */
+    const val URL =
+        "https://raw.githubusercontent.com/FabricPvZ/pvz-portable/main/launcher/empty-asset-index.json"
 
     /** The id the json declares, the file name's stem, and their content's checksum and length. */
     fun id(version: String): String = "pvz-portable-$version"
