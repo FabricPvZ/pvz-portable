@@ -8,7 +8,7 @@ package cn.enaium.fabricpvz.portable.lawn;
  *
  * <p>In the Java port this class is normally reached through Fabric Loader: the launcher
  * ({@code net.fabricmc.loader.impl.launch.knot.KnotClient}) discovers the game through the game
- * provider of {@code cn.enaium.fabricpvz:fabric-provider}, loads the {@code mods/} directory and
+ * provider the game jar itself carries, loads the {@code mods/} directory and
  * mod entry points, and then calls {@code Main.main(String[])} through the loader's class loader.
  * Running it directly (without the launcher) also works and simply means no mods are loaded.
  */

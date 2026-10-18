@@ -47,7 +47,7 @@ import cn.enaium.fabricpvz.portable.sexy.pak.PakInterface;
  * <strong>Nothing of the API is on the class path</strong>, in either mode the test runs: like every
  * other mod, the loader has to find it in the mods directory.
  * The loader finds the game through {@link #PROVIDER_CLASS} (the {@code GameProvider} implementation
- * of {@code cn.enaium.fabricpvz:fabric-provider}), resolves the mods, runs their entry points,
+ * the game jar carries), resolves the mods, runs their entry points,
  * applies their Mixin configurations and only then calls the game entry point, which the test
  * redirects to {@link ContentModGameMain} with {@code -Dpvz.game.mainClass}.
  *
