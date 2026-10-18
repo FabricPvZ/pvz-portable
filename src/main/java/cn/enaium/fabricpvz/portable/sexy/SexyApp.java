@@ -19,7 +19,7 @@ public class SexyApp extends SexyAppBase {
     private static final String CLI_LICENSE_NOTICE = """
             PvZ-Portable
 
-            Copyright (C) 2026 Zhou Qiankang <wszqkzqk@qq.com>
+            Copyright (C) 2026 Enaium
 
             SPDX-License-Identifier: LGPL-3.0-or-later
             Some source files also include:
@@ -112,7 +112,10 @@ public class SexyApp extends SexyAppBase {
         boolean checkSig = !isScreenSaver();
         loadProperties("properties/partner.xml", false, checkSig);
 
-        mProdName = getString("ProdName", mProdName);
+        // PORT-NOTE: the product name is this port's identity (`cn.enaium.fabricpvz`), so it is
+        // deliberately not taken from the game data's properties/partner.xml, which names the retail
+        // product - the same file still provides the window title.
+
         mIsWindowed = getBoolean("DefaultWindowed", mIsWindowed);
 
         String aNewTitle = getString("Title", "");

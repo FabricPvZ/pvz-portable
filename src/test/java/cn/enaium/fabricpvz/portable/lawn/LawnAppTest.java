@@ -513,4 +513,11 @@ class LawnAppTest {
 
         assertTrue(anApp.mAppCounter >= aBefore, "UpdateFrames() increments mAppCounter each tick");
     }
+
+    @Test
+    void thePortStatesItsOwnProduct() {
+        // `-version` prints this and the startup log carries it: the product is this port's own
+        // identity, not the upstream C++ project's id it started with.
+        assertEquals("cn.enaium.fabricpvz", new LawnApp().mProdName);
+    }
 }

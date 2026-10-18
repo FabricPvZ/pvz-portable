@@ -86,7 +86,7 @@ public final class PvzGameProvider implements GameProvider {
      * reports as the built-in {@code pvz-portable} mod names the game a user runs. Changing the game's
      * version means changing both.
      */
-    public static final String DEFAULT_GAME_VERSION = "1.2.4";
+    public static final String DEFAULT_GAME_VERSION = "1.2.5";
     /** Main class of the game. */
     public static final String DEFAULT_ENTRYPOINT = "cn.enaium.fabricpvz.portable.lawn.Main";
 

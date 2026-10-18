@@ -217,10 +217,14 @@ public class LawnApp extends SexyApp {
         mSfxVolume = 0.5525;
         mAutoStartLoadingThread = false;
         mDebugKeysEnabled = false;
-        mProdName = "io.github.wszqkzqk.pvz-portable";
-        mProductVersion = "";
-        mBuildNum = 0;
-        mCommitDate = "";
+        // The port's own identity, not the upstream C++ project's: this is the game a user runs, and
+        // the product line `-version` prints and the startup log carries.
+        mProdName = "cn.enaium.fabricpvz";
+        // All three come from the build (build-info.properties): a hard-coded zero build number and an
+        // empty commit date are what the log used to show.
+        mProductVersion = cn.enaium.fabricpvz.portable.BuildInfo.version();
+        mBuildNum = cn.enaium.fabricpvz.portable.BuildInfo.buildNumber();
+        mCommitDate = cn.enaium.fabricpvz.portable.BuildInfo.commitDate();
         mTitle = "PvZ Portable";
         mCustomCursorsEnabled = false;
         mPlayerInfo = null;

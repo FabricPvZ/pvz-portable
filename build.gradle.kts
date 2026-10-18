@@ -1,3 +1,4 @@
+import cn.enaium.fabricpvz.build.BuildInfo
 import cn.enaium.fabricpvz.build.Lwjgl
 import cn.enaium.fabricpvz.build.McPackage
 import cn.enaium.fabricpvz.build.configureRunTask
@@ -30,7 +31,7 @@ group = "cn.enaium.fabricpvz"
 // convention in the Distribution section), the version the game provider reports to Fabric Loader
 // (`PvzGameProvider.DEFAULT_GAME_VERSION`, which this line and that constant both state) and what a
 // mod names in `pvz("cn.enaium.fabricpvz:pvz-portable:<version>")` to build against it.
-version = "1.2.4"
+version = "1.2.5"
 
 // The version is stated twice: by the line above, and by the game provider the loader asks for it
 // (PvzGameProvider.DEFAULT_GAME_VERSION, which the loader reports as the built-in `pvz-portable`
@@ -244,6 +245,23 @@ application {
 // documents (`pvz-portable-<version>/bin/pvz-portable`) - because a distribution's root directory
 // otherwise follows its archive file name; `installDist`'s `build/install/pvz-portable/` is that same
 // tree without the root directory, and keeps it.
+// The build identity the game logs (BuildInfo): the version, the commit count and the commit's date,
+// written into a resource the game reads at startup. A build number of 0 and an empty commit date are
+// what an un-injected build reports, which is what the first version of this port did.
+val buildInfo = tasks.register<WriteProperties>("buildInfo") {
+    destinationFile = layout.buildDirectory.file("build-info/" + BuildInfo.RESOURCE)
+    comment = "Written by the buildInfo task; read by cn.enaium.fabricpvz.portable.BuildInfo."
+    property(BuildInfo.Keys.VERSION, project.version.toString())
+    property(BuildInfo.Keys.BUILD_NUMBER, BuildInfo.buildNumber(project))
+    property(BuildInfo.Keys.COMMIT_DATE, BuildInfo.commitDate(project))
+}
+
+// The resource is part of the jar (and of the test runtime class path), so both a packaged game and a
+// development run state the same build identity.
+tasks.named<ProcessResources>("processResources") {
+    from(buildInfo)
+}
+
 // The 14 bytes of the packages' empty asset index (PvzAssetIndex): the build writes them, so the
 // repository does not carry a copy of a constant - and the packages always ship the content their own
 // json declares by sha1 and size. The json's url names the same bytes under the version's own tag.
