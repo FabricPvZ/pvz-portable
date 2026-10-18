@@ -40,6 +40,14 @@ abstract class McVersionJsonTask : DefaultTask() {
     @get:Input
     abstract val assetIndexId: Property<String>
 
+    /**
+     * The project version, which is also the release tag: the address of the asset index is under it
+     * (`PvzAssetIndex.url`), and a tag path is immutable, so the bytes a launcher fetches can never
+     * diverge from the sha1 and size this json declares.
+     */
+    @get:Input
+    abstract val tag: Property<String>
+
     /** What a launcher starts ([McPackage.MAIN_CLASS]). */
     @get:Input
     abstract val mainClass: Property<String>
@@ -76,7 +84,7 @@ abstract class McVersionJsonTask : DefaultTask() {
             "mainClass" to mainClass.get(),
             "assetIndex" to linkedMapOf(
                 "id" to assetIndexId.get(),
-                "url" to PvzAssetIndex.URL,
+                "url" to PvzAssetIndex.url(tag.get()),
                 "sha1" to PvzAssetIndex.SHA1,
                 "size" to PvzAssetIndex.SIZE,
             ),
@@ -129,7 +137,11 @@ abstract class McVersionJsonTask : DefaultTask() {
  * Registers `mcVersionJson` on this project: the version id, the asset index it declares and the
  * output path are the script's declaration, the json's content is [McVersionJsonTask]'s.
  */
-fun Project.registerMcVersionJson(versionId: String, assetIndexId: String): TaskProvider<McVersionJsonTask> {
+fun Project.registerMcVersionJson(
+    versionId: String,
+    assetIndexId: String,
+    tag: String,
+): TaskProvider<McVersionJsonTask> {
     val runtimeClasspath = configurations.named("runtimeClasspath")
     val output = layout.buildDirectory.file("mcversion/$versionId/$versionId.json")
     return tasks.register("mcVersionJson", McVersionJsonTask::class.java) {
@@ -137,6 +149,7 @@ fun Project.registerMcVersionJson(versionId: String, assetIndexId: String): Task
         description = "Writes the Minecraft-style version json: arguments and libraries with download URLs."
         this.versionId.set(versionId)
         this.assetIndexId.set(assetIndexId)
+        this.tag.set(tag)
         mainClass.set(McPackage.MAIN_CLASS)
         javaMajorVersion.set(McPackage.JAVA_MAJOR_VERSION)
         // Resolving the class path (and hashing its jars) happens when the task's inputs are

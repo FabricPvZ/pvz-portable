@@ -299,7 +299,7 @@ in as the window size and the symptom is "the window displays nothing".
 
 ## 6. The version number, the distribution, releases
 
-- **The version is stated by two lines that go together**: `build.gradle.kts` (`version = "1.2.1"`) and
+- **The version is stated by two lines that go together**: `build.gradle.kts` (`version = "1.2.2"`) and
   `PvzGameProvider.DEFAULT_GAME_VERSION`. It is this repository's version and it does **not** track the
   upstream C++ project's release tags.
 - The same `project.version` decides four things: the jar name (`base { archivesName = "pvz-portable" }`,

@@ -30,7 +30,7 @@ group = "cn.enaium.fabricpvz"
 // convention in the Distribution section), the version the game provider reports to Fabric Loader
 // (`PvzGameProvider.DEFAULT_GAME_VERSION`, which this line and that constant both state) and what a
 // mod names in `pvz("cn.enaium.fabricpvz:pvz-portable:<version>")` to build against it.
-version = "1.2.1"
+version = "1.2.2"
 
 // The version is stated twice: by the line above, and by the game provider the loader asks for it
 // (PvzGameProvider.DEFAULT_GAME_VERSION, which the loader reports as the built-in `pvz-portable`
@@ -244,9 +244,26 @@ application {
 // documents (`pvz-portable-<version>/bin/pvz-portable`) - because a distribution's root directory
 // otherwise follows its archive file name; `installDist`'s `build/install/pvz-portable/` is that same
 // tree without the root directory, and keeps it.
+// The 14 bytes of the packages' empty asset index (PvzAssetIndex): the build writes them, so the
+// repository does not carry a copy of a constant - and the packages always ship the content their own
+// json declares by sha1 and size. The json's url names the same bytes under the version's own tag.
+val emptyAssetIndex = tasks.register("emptyAssetIndex") {
+    val output = layout.buildDirectory.file("asset-index/empty-asset-index.json")
+    outputs.file(output)
+    doLast { PvzAssetIndex.write(output.get().asFile) }
+}
+
+// Both packages also carry the empty asset index a launcher's pre-launch check wants (see
+// PvzAssetIndex): with the file at `assets/indexes/<id>.json` of an installation - which is what
+// copying `<package>/launcher/` over the game directory does - the check is satisfied locally and the
+// launch never touches the network for it.
 tasks.named<Zip>("distZip") {
     archiveFileName = "$distributionName-offline.zip"
     into(distributionName)
+    from(emptyAssetIndex) {
+        into("launcher/assets/indexes")
+        rename { PvzAssetIndex.fileName(project.version.toString()) }
+    }
 }
 
 tasks.named<Tar>("distTar") {
@@ -507,7 +524,7 @@ val mcVersionJar = tasks.register<Jar>("mcVersionJar") {
     }
 }
 
-val mcVersionJson = registerMcVersionJson(mcVersionId, mcAssetIndexId)
+val mcVersionJson = registerMcVersionJson(mcVersionId, mcAssetIndexId, project.version.toString())
 
 /** The launcher-shaped zip: `<version>/<version>.jar` + `<version>/<version>.json`, nothing else. */
 val mcVersionZip = tasks.register<Zip>("mcVersionZip") {
@@ -519,6 +536,10 @@ val mcVersionZip = tasks.register<Zip>("mcVersionZip") {
     into(mcVersionId)
     from(mcVersionJar)
     from(mcVersionJson)
+    from(emptyAssetIndex) {
+        into("launcher/assets/indexes")
+        rename { PvzAssetIndex.fileName(project.version.toString()) }
+    }
 }
 
 /** The Minecraft installation this package is installed into / launched from. */

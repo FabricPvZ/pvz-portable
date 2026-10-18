@@ -31,13 +31,17 @@ object PvzAssetIndex {
     const val CONTENT = """{"objects":{}}"""
 
     /**
-     * The address the json names: this repository's own copy of the 14 bytes, at a path that exists
-     * as soon as the repository is published. Not a release asset (a release attaches the two
-     * packages and nothing else) and not a tag-pinned path (a build has to name a URL that resolves
-     * before its own tag exists).
+     * The address the json names: this repository's copy of the 14 bytes **at the version's own tag**,
+     * which is immutable - the file a launcher fetches can therefore never diverge from the `sha1`
+     * and `size` the json declares. The tag is created with the release, and the file is in every
+     * commit the release is cut from, so the address resolves as soon as the package is downloadable.
+     *
+     * <p>It is not a release asset (a release attaches the two packages and nothing else) and not a
+     * branch path (a branch is mutable, so a launcher could one day fetch bytes the json no longer
+     * describes).
      */
-    const val URL =
-        "https://raw.githubusercontent.com/FabricPvZ/pvz-portable/main/launcher/empty-asset-index.json"
+    fun url(version: String): String =
+        "https://raw.githubusercontent.com/FabricPvZ/pvz-portable/$version/launcher/empty-asset-index.json"
 
     /** The id the json declares, the file name's stem, and their content's checksum and length. */
     fun id(version: String): String = "pvz-portable-$version"
@@ -51,6 +55,13 @@ object PvzAssetIndex {
     /** Where the index lives in a Minecraft installation: `<game dir>/assets/indexes/<id>.json`. */
     fun inGameDir(gameDir: File, version: String): File =
         File(gameDir, "assets/indexes/${fileName(version)}")
+
+    /** Writes the 14 bytes into [file]: how the build materializes them for the packages it writes. */
+    fun write(file: File): File {
+        file.parentFile.mkdirs()
+        file.writeText(CONTENT)
+        return file
+    }
 
     /** Writes the index into [gameDir] and returns it. Idempotent: the same 14 bytes every time. */
     fun install(gameDir: File, version: String): File {
