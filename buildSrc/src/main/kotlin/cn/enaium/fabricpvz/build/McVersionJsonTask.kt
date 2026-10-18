@@ -118,11 +118,13 @@ abstract class McVersionJsonTask : DefaultTask() {
                     "-cp",
                     "\${classpath}",
                 ),
-                "game" to listOf(
-                    // The game's own userdata, next to the game directory the provider reads from
-                    // -Dpvz.gameDir above. This one *is* a game argument: the game parses it itself.
-                    "-savedir", "\${game_directory}/pvz-userdata",
-                ),
+                // No game arguments. The save directory is deliberately *not* set here: the game's
+                // own default is `<resource directory>/savedata` - the same directory a plain run and
+                // the distribution's launcher script use, and the one the original game keeps its
+                // saves in - while `-savedir ${game_directory}/pvz-userdata` moved a launcher's saves
+                // somewhere nobody else would look, so a player's saves seemed to have vanished when
+                // they launched the same game through a launcher.
+                "game" to listOf<String>(),
             ),
             "libraries" to libraries.map { it.toJson() },
         )

@@ -7,9 +7,9 @@ provider, so the game is extended exactly like a Minecraft Fabric mod: `fabric.m
 `ModInitializer` entry points, a `mods/` directory, Sponge Mixin, and an event bus the game triggers at
 its own hook points.
 
-The version is **1.2.3**: the Gradle build, the jar, the Maven coordinate
-(`cn.enaium.fabricpvz:pvz-portable:1.2.3`) and the release archives
-(`pvz-portable-1.2.3-offline.zip`, the self-contained one, and `pvz-portable-1.2.3-online.zip`, the
+The version is **1.2.4**: the Gradle build, the jar, the Maven coordinate
+(`cn.enaium.fabricpvz:pvz-portable:1.2.4`) and the release archives
+(`pvz-portable-1.2.4-offline.zip`, the self-contained one, and `pvz-portable-1.2.4-online.zip`, the
 launcher-style one) all carry it. It does **not** track the upstream C++ project's release tags.
 
 ## Where the game's assets are found
@@ -19,6 +19,12 @@ order, first hit wins: `-resdir <path>` (a game argument), `-Dpvz.resDir=<path>`
 `PVZ_RES_DIR` (an environment variable), the working directory, the directory of the running jar, and a
 local Steam installation of Plants vs. Zombies (app id 3590, searched through every library folder,
 including the macOS `Plants vs. Zombies.app/Contents/Resources` layout).
+
+The save directory is the game's own default, `<resource directory>/savedata` - where the original game
+keeps its saves, and the same place however the game is started (the distribution's script, a development
+run, or a launcher): the Minecraft-style version package deliberately passes no `-savedir`, because a
+launcher-relative save directory means a player's saves are not where their own runs put them. A `-savedir
+<path>` game argument still overrides it, as it always has.
 
 Two things are worth knowing when a launcher is in play. First, a Minecraft-style launcher remaps
 `user.home` to its game directory (HMCL passes `-Duser.home=<the .minecraft directory>`), so the Steam
@@ -141,7 +147,7 @@ project directory therefore creates `userdata/` and `cache64/` next to the sourc
 ## The distribution (`distZip`)
 
 ```bash
-./gradlew distZip       # → build/distributions/pvz-portable-1.2.3-offline.zip
+./gradlew distZip       # → build/distributions/pvz-portable-1.2.4-offline.zip
 ./gradlew installDist   # → build/install/pvz-portable/ (the same thing, expanded)
 ```
 
@@ -151,13 +157,13 @@ every platform**: it carries the LWJGL native libraries of Windows, Linux and ma
 the directory for the machine it runs on.
 
 ```
-pvz-portable-1.2.3/
+pvz-portable-1.2.4/
 ├── bin/pvz-portable            start script: Fabric Loader's launcher (KnotClient) — the same entry
 ├── bin/pvz-portable.bat        point `./gradlew run` uses; the .bat is the Windows counterpart
-├── lib/                        pvz-portable-1.2.3.jar and everything needed to start:
+├── lib/                        pvz-portable-1.2.4.jar and everything needed to start:
 │                               the launcher stack (Fabric Loader, Mixin, ASM, the Log4j binding and
 │                               log4j2.xml), slf4j-api, the LWJGL modules and all 36 natives jars
-└── launcher/assets/indexes/    pvz-portable-1.2.3.json - the empty asset index a launcher's
+└── launcher/assets/indexes/    pvz-portable-1.2.4.json - the empty asset index a launcher's
                                 pre-launch check wants (14 bytes). Copy this directory tree over the
                                 game directory (`cp -r <package>/launcher/assets <game dir>/`) and the
                                 check is satisfied locally: no download, no network
@@ -191,10 +197,10 @@ unpacked distribution that game directory is the unpacked root — the directory
 `lib/`, so **`mods/` sits next to `bin/`**:
 
 ```bash
-unzip -q build/distributions/pvz-portable-1.2.3.zip -d /tmp/pvz
-mkdir -p /tmp/pvz/pvz-portable-1.2.3/mods
-cp /path/to/fabric-api-1.2.0.jar /path/to/some-mod-1.0.0.jar /tmp/pvz/pvz-portable-1.2.3/mods/
-/tmp/pvz/pvz-portable-1.2.3/bin/pvz-portable     # start it from any working directory
+unzip -q build/distributions/pvz-portable-1.2.4.zip -d /tmp/pvz
+mkdir -p /tmp/pvz/pvz-portable-1.2.4/mods
+cp /path/to/fabric-api-1.2.0.jar /path/to/some-mod-1.0.0.jar /tmp/pvz/pvz-portable-1.2.4/mods/
+/tmp/pvz/pvz-portable-1.2.4/bin/pvz-portable     # start it from any working directory
 ```
 
 The start scripts set `-Dpvz.gameDir` to the unpacked root derived from the script's own location
@@ -204,7 +210,7 @@ the user's `JAVA_OPTS`/`PVZ_PORTABLE_OPTS`, and in the JVM a later `-D` of the s
 can relocate the game directory:
 
 ```bash
-PVZ_PORTABLE_OPTS="-Dpvz.gameDir=/some/other/game/dir" /tmp/pvz/pvz-portable-1.2.3/bin/pvz-portable
+PVZ_PORTABLE_OPTS="-Dpvz.gameDir=/some/other/game/dir" /tmp/pvz/pvz-portable-1.2.4/bin/pvz-portable
 ```
 
 The provider also accepts a `-gamedir <path>` game argument, but resolves `-Dpvz.gameDir` first, so in
@@ -215,8 +221,8 @@ macOS); add JVM options through `PVZ_PORTABLE_OPTS` or `JAVA_OPTS`.
 Assets are still yours to point at, either as a game argument or through the environment:
 
 ```bash
-/tmp/pvz/pvz-portable-1.2.3/bin/pvz-portable -resdir "/path/to/Plants vs. Zombies/Resources"
-PVZ_RES_DIR="/path/to/resources" /tmp/pvz/pvz-portable-1.2.3/bin/pvz-portable
+/tmp/pvz/pvz-portable-1.2.4/bin/pvz-portable -resdir "/path/to/Plants vs. Zombies/Resources"
+PVZ_RES_DIR="/path/to/resources" /tmp/pvz/pvz-portable-1.2.4/bin/pvz-portable
 ```
 
 The zip is also what **mod builds compile against**: a mod project's `pvz(...)` configuration names
@@ -316,7 +322,7 @@ workflow, nothing that runs on a push — so a release is a deliberate, local ac
 ```bash
 # from the commit to release (on main), tagged with the version the build states: the tag names the
 # release and the asset is named after the same version
-VERSION="$(./gradlew -q printVersion)"                       # 1.2.3
+VERSION="$(./gradlew -q printVersion)"                       # 1.2.4
 git tag -a "$VERSION" -m "pvz-portable $VERSION" && git push origin "$VERSION"
 test "${VERSION#v}" = "$(git describe --tags --exact-match)" # tag == version, or stop here
 
@@ -431,7 +437,7 @@ mid-level save format (below).
 | Game: mid-level saves (`.v4`) | Done | 19 `SaveGameTest` tests: in-progress level round-trip, byte-identical rewrite after reading, CRC/version rejection |
 | Game: legacy `.dat` mid-level saves | N/A | Upstream README: `.dat` is "raw memory dumps … Do not share this file across platforms"; the port recognizes them by the upstream criterion and gives an actionable hint (open with the upstream version to auto-migrate to `.v4`) without faking a decoder |
 | Fabric Loader integration (game provider + API + a real `mods/` directory) | Done | `FabricLoaderEndToEndTest` launches Fabric Loader 0.19.5 in a second JVM with the API jar, the example mod and a fixture mod as the only three jars of a real `mods/` directory — the API is on the class path in neither mode the test runs — and verifies the resolved mod list (game, loader, the API's five modules nested in its aggregate jar, all three mod jars), a mod Mixin applied to game classes, the API's hook chain reaching a mod listener, the fixture's plant and zombie registrations on a real board, and the game booting Adventure level 1 to `SCENE_PLAYING` (300 ticks with the mod's board Mixin running) |
-| Distribution / release (the `application` plugin's zip) | Done | `./gradlew distZip` → `pvz-portable-1.2.3-offline.zip` (`bin/` + `lib/` only, ~28 MB) and `./gradlew mcVersionZip` → `pvz-portable-1.2.3-online.zip` with the 36 LWJGL natives jars, the bundled `lib/native/windows-{x64,arm64}/` libopenmpt (so Windows needs no installed library) and no `mods/` directory; verified outside the repository: unpacked in `/tmp`, `mods/` created next to `bin/`, mod jars copied in, `./bin/pvz-portable` started from an unrelated working directory → Fabric Loader resolves the mods and the game reaches `SCENE_PLAYING` |
+| Distribution / release (the `application` plugin's zip) | Done | `./gradlew distZip` → `pvz-portable-1.2.4-offline.zip` (`bin/` + `lib/` only, ~28 MB) and `./gradlew mcVersionZip` → `pvz-portable-1.2.4-online.zip` with the 36 LWJGL natives jars, the bundled `lib/native/windows-{x64,arm64}/` libopenmpt (so Windows needs no installed library) and no `mods/` directory; verified outside the repository: unpacked in `/tmp`, `mods/` created next to `bin/`, mod jars copied in, `./bin/pvz-portable` started from an unrelated working directory → Fabric Loader resolves the mods and the game reaches `SCENE_PLAYING` |
 
 ## Differences from upstream (deviation log)
 

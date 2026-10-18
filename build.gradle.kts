@@ -30,7 +30,7 @@ group = "cn.enaium.fabricpvz"
 // convention in the Distribution section), the version the game provider reports to Fabric Loader
 // (`PvzGameProvider.DEFAULT_GAME_VERSION`, which this line and that constant both state) and what a
 // mod names in `pvz("cn.enaium.fabricpvz:pvz-portable:<version>")` to build against it.
-version = "1.2.3"
+version = "1.2.4"
 
 // The version is stated twice: by the line above, and by the game provider the loader asks for it
 // (PvzGameProvider.DEFAULT_GAME_VERSION, which the loader reports as the built-in `pvz-portable`
