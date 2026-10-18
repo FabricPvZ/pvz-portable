@@ -32,6 +32,50 @@ class ResourceLocatorTest {
     }
 
     @Test
+    void systemPropertyIsHonoured() throws IOException {
+        Path propertyRoot = makeRootWithProperties("property");
+        Path cwdRoot = makeRootWithPak("cwd-for-property");
+        System.setProperty(ResourceLocator.RES_DIR_PROPERTY, propertyRoot.toString());
+        try {
+            var found = ResourceLocator.discover(new String[0], cwdRoot, null, null, List.of());
+            assertEquals(propertyRoot.toAbsolutePath(), found.resourceRoot());
+            assertEquals(ResourceLocator.Discovery.Source.SYSTEM_PROPERTY, found.source());
+        } finally {
+            System.clearProperty(ResourceLocator.RES_DIR_PROPERTY);
+        }
+    }
+
+    @Test
+    void theCommandLineStillWinsOverTheProperty() throws IOException {
+        Path cliRoot = makeRootWithPak("cli-over-property");
+        Path propertyRoot = makeRootWithPak("property-loses");
+        System.setProperty(ResourceLocator.RES_DIR_PROPERTY, propertyRoot.toString());
+        try {
+            var found = ResourceLocator.discover(
+                    new String[] {"-resdir", cliRoot.toString()}, null, null, null, List.of());
+            assertEquals(cliRoot.toAbsolutePath(), found.resourceRoot());
+            assertEquals(ResourceLocator.Discovery.Source.CLI_ARGUMENT, found.source());
+        } finally {
+            System.clearProperty(ResourceLocator.RES_DIR_PROPERTY);
+        }
+    }
+
+    @Test
+    void theDiagnosisNamesWhatWasSearchedAndHowToFixIt() throws IOException {
+        Path cwd = Files.createDirectories(tmp.resolve("nothing-here"));
+        var found = ResourceLocator.discover(new String[0], cwd, null, null, List.of());
+        assertNull(found.resourceRoot());
+        String diagnosis = ResourceLocator.diagnose(found);
+        // The one thing the failure message has to carry: where the search looked, and the three
+        // ways to point it somewhere else (the JVM-argument form is the one a launcher can set).
+        assertTrue(diagnosis.contains(cwd.toAbsolutePath().toString()), diagnosis);
+        assertTrue(diagnosis.contains("-D" + ResourceLocator.RES_DIR_PROPERTY + "="), diagnosis);
+        assertTrue(diagnosis.contains("-resdir"), diagnosis);
+        assertTrue(diagnosis.contains("PVZ_RES_DIR"), diagnosis);
+        assertTrue(diagnosis.contains("user.home="), diagnosis);
+    }
+
+    @Test
     void commandLineArgumentWins() throws IOException {
         Path cliRoot = makeRootWithPak("cli");
         Path cwdRoot = makeRootWithPak("cwd");

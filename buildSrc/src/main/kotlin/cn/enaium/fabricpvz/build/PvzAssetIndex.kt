@@ -31,17 +31,31 @@ object PvzAssetIndex {
     const val CONTENT = """{"objects":{}}"""
 
     /**
-     * The address the json names: this repository's copy of the 14 bytes **at the version's own tag**,
-     * which is immutable - the file a launcher fetches can therefore never diverge from the `sha1`
-     * and `size` the json declares. The tag is created with the release, and the file is in every
-     * commit the release is cut from, so the address resolves as soon as the package is downloadable.
+     * The address the json names: the release's own copy of the 14 bytes, uploaded as
+     * {@code pvz-portable-<version>-asset-index.json} next to the two packages.
      *
-     * <p>It is not a release asset (a release attaches the two packages and nothing else) and not a
-     * branch path (a branch is mutable, so a launcher could one day fetch bytes the json no longer
-     * describes).
+     * <p>It is a release asset because that is the only address that is ours, immutable and always
+     * reachable: a raw path on a branch is mutable and needs a file in the repository, a raw path
+     * under a tag exists only if that tag's commit happens to carry the file (the tag of a release cut
+     * after the file was removed does not, and the URL 404s - a launcher that then finds nothing else
+     * aborts the launch, which is the failure this whole declaration exists to prevent), and a vanilla
+     * asset index is 146.4 MB of assets this port never uses.
+     *
+     * <p>The bytes never change between versions, but the address is per version, so a release stays
+     * self-describing: what the json declares is what its own release serves.
      */
     fun url(version: String): String =
-        "https://raw.githubusercontent.com/FabricPvZ/pvz-portable/$version/launcher/empty-asset-index.json"
+        "https://github.com/" + REPOSITORY + "/releases/download/" + version + "/" +
+            ASSET_PREFIX + version + "-asset-index.json"
+
+    /** The repository the releases (and the asset above) belong to. */
+    const val REPOSITORY = "FabricPvZ/pvz-portable"
+
+    /** The name of the release asset that carries the 14 bytes. */
+    fun assetName(version: String): String = ASSET_PREFIX + version + "-asset-index.json"
+
+    /** The directory of a source checkout / the release's own asset prefix. */
+    const val ASSET_PREFIX = "pvz-portable-"
 
     /** The id the json declares, the file name's stem, and their content's checksum and length. */
     fun id(version: String): String = "pvz-portable-$version"

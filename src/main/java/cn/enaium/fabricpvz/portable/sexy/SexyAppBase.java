@@ -2896,6 +2896,9 @@ public class SexyAppBase implements ButtonListener, DialogListener {
             Common.logInfoLn("Using game resources from {} ({})", aDiscovery.resourceRoot(), aDiscovery.source());
             return aDiscovery.resourceRoot().toString();
         }
+        // Nothing found: say what was searched (and what this JVM is), because the failure the game
+        // reports next - a missing main.pak - is the same however the search went wrong.
+        Common.logErrorLn("{}", cn.enaium.fabricpvz.portable.pvzp.ResourceLocator.diagnose(aDiscovery));
         return mResourceDir == null ? "" : mResourceDir;
     }
 

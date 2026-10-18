@@ -43,11 +43,46 @@ public final class SteamLibraryFinder {
     private SteamLibraryFinder() {
     }
 
-    /** Ordered candidate Steam root directories for the current OS. */
+    /**
+     * Ordered candidate Steam root directories for the current OS, under every home this machine may
+     * have (see {@link #homes}).
+     *
+     * <p>It is deliberately not {@code user.home} alone: a Minecraft-style launcher remaps that
+     * property to the game directory (HMCL launches with
+     * {@code -Duser.home=<the .minecraft directory>}), and a Steam search derived from it looks for
+     * {@code <.minecraft>/Library/Application Support/Steam}, which of course is not there - while the
+     * real installation sits under the account's home all along. The environment's {@code HOME} is
+     * what such a launcher does not change.
+     */
     public static List<Path> defaultSteamRoots() {
-        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-        Path home = Path.of(System.getProperty("user.home", "."));
-        return steamRoots(os, home, System.getenv());
+        String os = System.getProperty("os.name", "");
+        return steamRoots(os, homes(System.getenv("HOME"), System.getProperty("user.home")), System.getenv());
+    }
+
+    /**
+     * The home directories to search, in the order they are tried: the environment's {@code HOME}
+     * first (a launcher cannot remap it), then {@code user.home}. A machine has one home, so the two
+     * normally agree and the second is dropped; when a launcher has remapped {@code user.home}, both
+     * are kept and the real one wins.
+     */
+    static List<Path> homes(String envHome, String userHome) {
+        List<Path> homes = new ArrayList<>();
+        if (envHome != null && !envHome.isBlank()) {
+            homes.add(Path.of(envHome));
+        }
+        if (userHome != null && !userHome.isBlank()) {
+            homes.add(Path.of(userHome));
+        }
+        return distinct(homes);
+    }
+
+    /** The Steam roots of every home, deduplicated, in the order the homes are given. */
+    static List<Path> steamRoots(String os, List<Path> homes, java.util.Map<String, String> env) {
+        List<Path> roots = new ArrayList<>();
+        for (Path home : homes) {
+            roots.addAll(steamRoots(os, home, env));
+        }
+        return distinct(roots);
     }
 
     /**

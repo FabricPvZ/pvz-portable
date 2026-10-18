@@ -14,7 +14,10 @@ import java.util.Optional;
  *
  * <p>Search order (first hit wins), matching the port plan:
  * <ol>
- *   <li>{@code -resdir=<path>} command line argument</li>
+ *   <li>{@code -resdir=<path>} command line argument (a game argument)</li>
+ *   <li>{@code -Dpvz.resDir=<path>} system property (a JVM argument, which is what a launcher's
+ *       JVM-arguments field can set - the field a Minecraft-style launcher offers next to the game
+ *       arguments, and the one that survives a launcher that does not pass game arguments through)</li>
  *   <li>{@code PVZ_RES_DIR} environment variable</li>
  *   <li>current working directory</li>
  *   <li>directory of the running jar / executable</li>
@@ -30,6 +33,9 @@ public final class ResourceLocator {
     public static final String MAIN_PAK = "main.pak";
     public static final String PROPERTIES_DIR = "properties";
 
+    /** The system property form of the override: {@code -Dpvz.resDir=<path>}. */
+    public static final String RES_DIR_PROPERTY = "pvz.resDir";
+
     private ResourceLocator() {
     }
 
@@ -37,6 +43,7 @@ public final class ResourceLocator {
     public record Discovery(Path resourceRoot, Source source, List<Path> searched) {
         public enum Source {
             CLI_ARGUMENT,
+            SYSTEM_PROPERTY,
             ENVIRONMENT,
             WORKING_DIRECTORY,
             EXECUTABLE_DIRECTORY,
@@ -91,6 +98,15 @@ public final class ResourceLocator {
             }
         }
 
+        String propertyResDir = System.getProperty(RES_DIR_PROPERTY, "");
+        if (!propertyResDir.isBlank()) {
+            Path candidate = Path.of(propertyResDir).toAbsolutePath();
+            searched.add(candidate);
+            if (isValidResourceRoot(candidate)) {
+                return new Discovery(candidate, Discovery.Source.SYSTEM_PROPERTY, searched);
+            }
+        }
+
         if (envResDir != null && !envResDir.isBlank()) {
             Path candidate = Path.of(envResDir).toAbsolutePath();
             searched.add(candidate);
@@ -129,6 +145,40 @@ public final class ResourceLocator {
         }
 
         return new Discovery(null, null, searched);
+    }
+
+    /**
+     * What to print when nothing was found: every location that was tried, the Steam roots that were
+     * searched (with whether they exist at all), and the ways to point the game at a resource
+     * directory. A launch that fails for want of {@code main.pak} is otherwise indistinguishable
+     * from one that fails because the assets are somewhere the search never looks.
+     */
+    public static String diagnose(Discovery discovery) {
+        StringBuilder message = new StringBuilder();
+        message.append("No game resources found (main.pak or a properties/ directory). Searched:\n");
+        if (discovery.searched().isEmpty()) {
+            message.append("  (nothing: the search produced no candidate)\n");
+        } else {
+            for (Path path : discovery.searched()) {
+                message.append("  ").append(path)
+                    .append(Files.exists(path) ? (Files.isDirectory(path) ? " (a directory)" : " (not a directory)") : " (does not exist)")
+                    .append('\n');
+            }
+        }
+        for (Path root : SteamLibraryFinder.defaultSteamRoots()) {
+            message.append("  [Steam] ").append(root)
+                .append(Files.isDirectory(root) ? "" : " (no Steam installation here)")
+                .append('\n');
+        }
+        message.append("This JVM: user.home=").append(System.getProperty("user.home", "?"))
+            .append(", os.name=").append(System.getProperty("os.name", "?"))
+            .append(", working directory=").append(System.getProperty("user.dir", "?")) .append('\n');
+        message.append("Point the game at the assets in any of these ways:\n")
+            .append("  -resdir \"<the directory with main.pak/properties>\"        (a game argument)\n")
+            .append("  -D").append(RES_DIR_PROPERTY).append("=\"<that directory>\"      (a JVM argument)\n")
+            .append("  PVZ_RES_DIR=\"<that directory>\"                        (an environment variable)\n")
+            .append("or copy main.pak and properties/ into the game directory.");
+        return message.toString();
     }
 
     /** Convenience overload using the current process working directory. */

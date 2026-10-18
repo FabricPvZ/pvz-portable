@@ -37,6 +37,37 @@ class SteamLibraryFinderTest {
     }
 
     @Test
+    void homesPreferTheEnvironmentOverARemappedUserHome() {
+        // What a launcher does: user.home becomes the game directory. Both are searched, the real one
+        // first - the case that made a Steam installation invisible to a launch under HMCL.
+        List<Path> homes = SteamLibraryFinder.homes("/Users/somebody", "/Users/somebody/.minecraft");
+        assertEquals(
+            List.of(Path.of("/Users/somebody"), Path.of("/Users/somebody/.minecraft")),
+            homes
+        );
+        // A machine where they agree keeps one.
+        assertEquals(List.of(Path.of("/Users/somebody")), SteamLibraryFinder.homes("/Users/somebody", "/Users/somebody"));
+        assertEquals(List.of(Path.of("/home/x")), SteamLibraryFinder.homes(null, "/home/x"));
+        assertEquals(List.of(), SteamLibraryFinder.homes(null, null));
+    }
+
+    @Test
+    void everyHomeContributesItsSteamRoots() {
+        List<Path> roots = SteamLibraryFinder.steamRoots(
+                "Mac OS X",
+                SteamLibraryFinder.homes("/Users/somebody", "/Users/somebody/.minecraft"),
+                Map.of()
+        );
+        assertEquals(
+            List.of(
+                Path.of("/Users/somebody/Library/Application Support/Steam"),
+                Path.of("/Users/somebody/.minecraft/Library/Application Support/Steam")
+            ),
+            roots
+        );
+    }
+
+    @Test
     void parsesBothLibraryFolderFormats() {
         String vdf = """
                 "libraryfolders"

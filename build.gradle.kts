@@ -30,7 +30,7 @@ group = "cn.enaium.fabricpvz"
 // convention in the Distribution section), the version the game provider reports to Fabric Loader
 // (`PvzGameProvider.DEFAULT_GAME_VERSION`, which this line and that constant both state) and what a
 // mod names in `pvz("cn.enaium.fabricpvz:pvz-portable:<version>")` to build against it.
-version = "1.2.2"
+version = "1.2.3"
 
 // The version is stated twice: by the line above, and by the game provider the loader asks for it
 // (PvzGameProvider.DEFAULT_GAME_VERSION, which the loader reports as the built-in `pvz-portable`
@@ -248,7 +248,9 @@ application {
 // repository does not carry a copy of a constant - and the packages always ship the content their own
 // json declares by sha1 and size. The json's url names the same bytes under the version's own tag.
 val emptyAssetIndex = tasks.register("emptyAssetIndex") {
-    val output = layout.buildDirectory.file("asset-index/empty-asset-index.json")
+    // Named exactly as the release asset the json's url names (PvzAssetIndex.assetName), so a release
+    // uploads this task's output unchanged.
+    val output = layout.buildDirectory.file("asset-index/" + PvzAssetIndex.assetName(project.version.toString()))
     outputs.file(output)
     doLast { PvzAssetIndex.write(output.get().asFile) }
 }
