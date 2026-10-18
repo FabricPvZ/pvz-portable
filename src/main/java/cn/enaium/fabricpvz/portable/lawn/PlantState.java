@@ -2,7 +2,7 @@
  * Ported from src/Lawn/Plant.h:49-98.
  *
  * Upstream enum PlantState (int32_t); represented as public static final int constants
- * (API-CONTRACTS.md §6). Declaration order is the upstream ordinal order.
+ * (AGENTS.md §7, item 2). Declaration order is the upstream ordinal order.
  */
 package cn.enaium.fabricpvz.portable.lawn;
 

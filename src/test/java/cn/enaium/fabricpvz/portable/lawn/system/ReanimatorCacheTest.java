@@ -41,7 +41,7 @@ import cn.enaium.fabricpvz.portable.test.HeadlessTestApp;
  *
  * <p>Upstream draws that second pass for a written-out list of seed types (its own pea shooters), which
  * is why a plant registered with the same reanimation used to appear without a head in all three places
- * - the rule is the reanimation, so it is read from the reanimation ({@code docs/VERIFICATION.md} §48).
+ * - the rule is the reanimation, so it is read from the reanimation ({@code ../verification/VERIFICATION.md} §48).
  * The test renders the frame of a registered seed type through the real retail {@code .reanim} data and
  * compares it with the retail peashooter's, plus a control that shows the comparison is sensitive to
  * which reanimation the definition names.

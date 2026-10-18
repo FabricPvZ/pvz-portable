@@ -20,14 +20,15 @@ Conventions used below: `file:line` references are relative to this repository's
   and OpenAL + stb_vorbis for audio (MO3 through libopenmpt). Upstream is a **read-only reference**:
   this project neither builds nor modifies it.
 - **It runs on the real Fabric Loader.** The game is plugged into Fabric Loader (Sponge Mixin
-  included) through a `GameProvider` in the `fabric-provider` repository, and in the loader's eyes it
+  included) through a `GameProvider` that is part of this project's own sources
+  (`src/main/java/cn/enaium/fabricpvz/provider/`), and in the loader's eyes it
   is a built-in mod with mod id `pvz-portable` (`PvzGameProvider.java:80`). The `mods/` directory of
   the game directory is loaded by the loader, entry points are ordinary `ModInitializer`s, and the
   event/content APIs come from the `fabric-api` repository. The launch main class is the loader's own
   `net.fabricmc.loader.impl.launch.knot.KnotClient` (`build.gradle.kts:161`).
 - **The game code itself has no Fabric dependency at all.** Inside `src/main`, `net.fabricmc` appears
   only in a javadoc comment (`src/main/java/cn/enaium/fabricpvz/portable/lawn/Main.java:10`). Only the
-  `fabric-provider` repository knows about Fabric: it finds the game, unlocks the class-loading path
+  provider package knows about Fabric: it finds the game, unlocks the class-loading path
   (so Mixin can rewrite game classes), runs the mod entry points and finally calls the game's main.
   Adding a `net.fabricmc.*` dependency inside `src/main` is an architectural change that needs
   explaining, not a convenience to help yourself to.
@@ -46,7 +47,6 @@ Conventions used below: `file:line` references are relative to this repository's
 
 | Sibling repository | Role |
 |---|---|
-| `../fabric-provider/` | the only Fabric-aware piece: game provider + launch libraries (Loader/Mixin/ASM/logging stack) |
 | `../fabric-api/` | the mod API: `api-base`, `api-events`, `api-plant`, `api-resource`, `api-zombie` (**compiled against this project**, a reverse dependency by Fabric semantics) |
 | `../loom/` | the mod toolchain Gradle plugin `cn.enaium.fabricpvz.loom`: one `plugins { }` line gets a mod every dependency plus `runClient` |
 | `../pvz-example-mod/`, `../pvz-content-mod/`, `../speed-mod/`, `../auto-collect-mod/` | four real mods (example / content / speed / auto-collect) |
@@ -107,7 +107,7 @@ PvZ-Portable/
 - **Nothing under `run/` or `build/` goes into git** (`.gitignore`: `run/`, `build/`, `userdata/`,
   `cache64/`, `.idea/`). Do not commit the user data or logs that tests and runs produce. `run/mods/`
   is a real installation's mods directory, and no task of this build reads or writes it.
-- **`build.gradle.kts` is this project's hub**: the dependencies (`fabric-provider`, the test-only
+- **`build.gradle.kts` is this project's hub**: the dependencies (the launch libraries, the test-only
   `modsForTest` configuration — the API's aggregate jar and the example mod, which the loader
   end-to-end test loads from a real `mods/` directory — and the API, which is **not** a dependency of
   the game in either direction: it is a mod, so this project consumes the published mavenLocal
@@ -125,7 +125,7 @@ Environment: **JDK 25** (toolchain and `--release 25`, `build.gradle.kts:24-26,2
 installed on the machine already.
 
 This project is standalone: it consumes the artifacts of its sibling repositories as **mavenLocal
-coordinates** — `fabric-provider` (the launcher stack), the mod API (its five `api-*` modules for the
+coordinates** — the mod API (its five `api-*` modules for the
 test compile class path, its aggregate jar for the loader end-to-end test's `mods/` directory) and the
 example mod — never as Gradle subprojects and never as files of a sibling checkout. The mod Gradle
 plugin `cn.enaium.fabricpvz.loom` that the API build applies comes from the **Gradle Plugin Portal**,
@@ -133,8 +133,6 @@ so it needs no checkout and no local publication here. A first-time setup publis
 order:
 
 ```bash
-# from ../fabric-provider
-./gradlew publishToMavenLocal
 # this project, without tests: the API compiles against this game's coordinate, so its POM must exist first
 ./gradlew publishToMavenLocal -x test
 # from ../fabric-api (publishes the aggregate `fabric-api` jar and the five `api-*` modules)
@@ -301,14 +299,16 @@ in as the window size and the symptom is "the window displays nothing".
 
 ## 6. The version number, the distribution, releases
 
-- **The version is declared in exactly one place**: `build.gradle.kts:15` (`version = "1.1.0"`). It is
-  this repository's version and it does **not** track the upstream C++ project's release tags.
+- **The version is stated by two lines that go together**: `build.gradle.kts` (`version = "1.2.1"`) and
+  `PvzGameProvider.DEFAULT_GAME_VERSION`. It is this repository's version and it does **not** track the
+  upstream C++ project's release tags.
 - The same `project.version` decides four things: the jar name (`base { archivesName = "pvz-portable" }`,
   `:21`; `build/libs/pvz-portable-<version>.jar`), the Maven coordinate
   `cn.enaium.fabricpvz:pvz-portable:<version>` (published by `publishToMavenLocal`, with
   LGPL-3.0-or-later POM metadata), the distribution zip's file name (`:201`), and
   `Implementation-Version` in the jar manifest — i.e. the version the loader reports for the built-in
-  `pvz-portable` mod through the provider. When changing the version, change only `:15`; never
+  `pvz-portable` mod through the provider. When changing the version, change the `version` line of
+  `build.gradle.kts` *and* `PvzGameProvider.DEFAULT_GAME_VERSION` together (both state it); never
   hard-code a version string anywhere else.
 - **The distribution is produced by Gradle's `application` plugin**: `./gradlew distZip` →
   `build/distributions/pvz-portable-<version>.zip`, and the layout is **one zip for every platform,
@@ -366,7 +366,7 @@ in as the window size and the symptom is "the window displays nothing".
 | `build.gradle.kts:15` | the single declaration point (jar / POM / distribution / manifest all take `project.version`) |
 | `../fabric-api/{api-base,api-events,api-plant,api-resource,api-zombie}/build.gradle.kts` | each module pins `cn.enaium.fabricpvz:pvz-portable:<version>` once for `compileOnly` and once for `testImplementation` |
 | `../loom/src/main/kotlin/cn/enaium/fabricpvz/loom/PvzToolchain.kt:31,34` (`GAME_VERSION`, `GAME`) | the default of the mod-side `pvz(...)` configuration; see §5 |
-| `../fabric-provider/…/PvzGameProvider.java:89` (`DEFAULT_GAME_VERSION`) | the version of the built-in `pvz-portable` mod as the loader sees it |
+| `src/main/java/…/provider/PvzGameProvider.java:89` (`DEFAULT_GAME_VERSION`) | the version of the built-in `pvz-portable` mod as the loader sees it |
 | `src/test/java/…/contentmodfixture/FabricLoaderEndToEndTest.java:113` | the end-to-end test asserts the game version the loader reports |
 | each mod's `fabric.mod.json` | **no change needed**: they write `"pvz-portable": "*"` (version-independent) |
 
@@ -385,8 +385,8 @@ in as the window size and the symptom is "the window displays nothing".
    reorder, rename or bulk-reformat.
 3. **Do not introduce Fabric/Loader dependencies into game code** (a `net.fabricmc.*` appearing in
    `src/main` is a design change), and don't give the game a second logging implementation: the logging
-   stack (Log4j + `log4j2.xml`) is published by `fabric-provider` as a launch library, and this project
-   declares only the SLF4J API (`api(libs.slf4j.api)`).
+   stack (Log4j + `log4j2.xml`) is part of this project's launch libraries (the `runtimeOnly`
+   dependencies and the resource), and this project declares only the SLF4J API (`api(libs.slf4j.api)`).
 4. **Logging goes through `Common`**: `Common.logInfoLn/logErrorLn/logWarnLn/logDebugLn`
    (`src/main/java/cn/enaium/fabricpvz/portable/sexy/Common.java:187`, the logger name is exactly
    `pvz-portable`, `:99`); do not add `System.out.println`/`printStackTrace`.
@@ -469,15 +469,19 @@ organization, `main` only), so the rules above are the rules of this project its
 
 - `README.md`: what the project is, requirements, build/run/test, asset discovery, the distribution and
   how mods are installed, the porting status matrix, the deviation log, the driver tasks and the licence.
-- `../fabric-provider/README.md`: how the loader finds the game, the full table of launch arguments and
-  system properties, the logging stack.
+- `GAME-PROVIDER.md`: how the loader finds the game, the full table of launch arguments and
+  system properties, the logging stack (the game provider is part of this project,
+  `src/main/java/cn/enaium/fabricpvz/provider/`).
 - `../loom/README.md`: what the mod toolchain supplies, what `runClient` does (a development run: the
   mod's own output and the API on the class path, nothing copied into `run/mods/`), the Kotlin rules, and how
   a mod's `pvz(...)` configuration resolves this game's distribution.
-- The FabricPvZ documentation (kept outside this repository, next to the sibling checkouts): the mod
-  development guide, the API contracts, the porting plan and the round-by-round verification records —
-  read the last one to find out how a behaviour "was verified back then". If a change here affects the
-  game's public API, the snippets in the mod guide may need updating there.
+- The FabricPvZ documentation (kept outside this repository, next to the sibling checkouts):
+  `../docs/` is the mod development site (VitePress 2, Chinese and English: getting started, project
+  structure, Mixin experiments, the content/resource APIs, the `pvz-content-mod` walkthrough, building
+  and publishing, and the API reference), and `../verification/` holds the internal records
+  (`VERIFICATION.md`, the round-by-round verification log, and `research/`, the upstream specs) — read
+  the latter to find out how a behaviour "was verified back then". If a change here affects the game's
+  public API, the snippets in the site's chapters may need updating there.
 
 ---
 
@@ -493,7 +497,7 @@ test counts, note how they were observed:
 | build configuration, dependencies, distribution, driver tasks, version declaration | `build.gradle.kts`, `settings.gradle.kts`, `gradle/libs.versions.toml`, `gradle/wrapper/gradle-wrapper.properties`, `gradle.properties` |
 | entry points and logging conventions | `src/main/java/…/lawn/Main.java`, `src/main/java/…/sexy/Common.java` |
 | the game-side hook points and the capacity-sized definition tables | `src/main/java/…/lawn/hooks/LawnHooks.java`, `src/main/java/…/lawn/SeedType.java` (`MAX_SEED_TYPES`), `src/main/java/…/lawn/ZombieType.java` (`MAX_ZOMBIE_TYPES`), `src/main/java/…/lawn/Plant.java` / `Zombie.java` (`gPlantDefs`/`gZombieDefs`, `getPlantDefinition`/`getZombieDefinition`) |
-| game dir / mod loading | `../fabric-provider/README.md`, `../fabric-provider/src/main/java/…/PvzGameProvider.java`, the actual contents of `run/` |
+| game dir / mod loading | `GAME-PROVIDER.md`, `src/main/java/…/provider/PvzGameProvider.java`, the actual contents of `run/` |
 | the test system and fixtures | `src/test/java/…/test/*.java`, `src/test/java/…/contentmodfixture/*.java`, `src/test/java/…/pvzp/TestAssets.java`, `src/test/resources/junit-platform.properties`, `build/test-results/test/*.xml` |
 | asset discovery and Steam lookup | `src/main/java/…/pvzp/ResourceLocator.java`, `src/main/java/…/pvzp/SteamLibraryFinder.java` |
 | the mod toolchain and the mod projects | `../loom/src/main/kotlin/…/PvzToolchain.kt`, `../loom/src/main/kotlin/…/PvzModPlugin.kt`, each mod's `fabric.mod.json`, `../fabric-api/settings.gradle.kts` + each mod's `settings.gradle.kts`/`build.gradle.kts` (the `pluginManagement` block that resolves the plugin from `mavenLocal` first and the Gradle Plugin Portal after it, and the version stated there) |

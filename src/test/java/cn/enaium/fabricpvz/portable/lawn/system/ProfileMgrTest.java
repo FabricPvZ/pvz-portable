@@ -1,5 +1,5 @@
 /*
- * Golden test for the two profile save formats (docs/research/03-save.md §4.3 and §5):
+ * Golden test for the two profile save formats (../verification/research/03-save.md §4.3 and §5):
  *  - userdata/user{id}.dat  (PlayerInfo.syncDetails, version 12)
  *  - userdata/users.dat     (ProfileMgr.syncState, version 14)
  *
@@ -128,7 +128,7 @@ class ProfileMgrTest {
     private static final int GOLDEN_FILE_SIZE = 205 * 4 + 2 * 88 + 20 * 2 + 1 + 4 + 0x48 + 20 + 1;
 
     /**
-     * Hand-built `user{id}.dat` for version 12, per docs/research/03-save.md §4.3:
+     * Hand-built `user{id}.dat` for version 12, per ../verification/research/03-save.md §4.3:
      * u32 version; u32 mLevel=7, mCoins=12345, mFinishedAdventure=1; 100 challenges (idx0=5, idx15=2);
      * 80 purchases (idx0=1000, idx1=7); 21 scalars = 101..121; 2 PottedPlants; 20 achievement u16s
      * (idx0/idx19 = 1); u8 zombatarAccepted=1; u32 headCount; headCount*0x48 bytes; 20 derived

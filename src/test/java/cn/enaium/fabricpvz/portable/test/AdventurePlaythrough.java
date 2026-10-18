@@ -26,7 +26,7 @@ import cn.enaium.fabricpvz.portable.sexy.ButtonWidget;
 /**
  * Plays Adventure mode end to end through the real window and the real input path: every action is a
  * synthetic mouse event pushed into SDL's queue, so it travels through {@code SdlPlatform.pollEvent}
- * into the widget tree exactly like a hardware click (see docs/VERIFICATION.md §14).
+ * into the widget tree exactly like a hardware click (see ../verification/VERIFICATION.md §14).
  *
  * <p>Two test-only assists keep a full run tractable. Both live in this file as a {@link LawnHooks}
  * listener registered at start-up - the game itself is untouched, so nothing has to be reverted:

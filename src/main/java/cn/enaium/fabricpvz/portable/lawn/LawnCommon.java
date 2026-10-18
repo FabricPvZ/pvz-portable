@@ -3,7 +3,7 @@
  *
  * Upstream is a set of free functions plus the LawnEditWidget class (ported separately in
  * LawnEditWidget.java); in Java the free functions live on this final static-utility class,
- * keeping the upstream names camelCased (API-CONTRACTS.md §6).
+ * keeping the upstream names camelCased (AGENTS.md §7, item 2).
  */
 package cn.enaium.fabricpvz.portable.lawn;
 

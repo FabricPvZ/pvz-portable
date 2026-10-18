@@ -40,7 +40,7 @@ import cn.enaium.fabricpvz.portable.sexy.sound.SoundManager;
  *   <li>the first error wins and is suffixed with {@code " on Line N"} / {@code " in File '<f>'"}.</li>
  * </ul>
  *
- * <p>Image accessors return {@link SharedImageRef} (docs/research/01-framework-core.md §8.3); the
+ * <p>Image accessors return {@link SharedImageRef} (../verification/research/01-framework-core.md §8.3); the
  * Java handle is nullable and reports {@link SharedImageRef#isNull()} when missing. {@code intptr_t}
  * sound ids become {@code long} ({@code -1} = missing).
  */

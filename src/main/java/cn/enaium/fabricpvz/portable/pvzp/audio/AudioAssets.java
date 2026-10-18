@@ -44,7 +44,7 @@ final class AudioAssets {
      * {@link AudioFormat#UNKNOWN} instead of being dropped, so a caller can tell an asset that is not
      * there at all (empty list) from one that is there but not decodable by this port — the loading
      * thread reports the former as a missing resource and only logs the latter
-     * (docs/VERIFICATION.md §59).
+     * (../verification/VERIFICATION.md §59).
      */
     static List<Loaded> readAll(PakInterface pakInterface, String fileName) throws IOException {
         List<Loaded> found = new ArrayList<>();

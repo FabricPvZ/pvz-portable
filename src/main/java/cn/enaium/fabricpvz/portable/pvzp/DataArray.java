@@ -4,7 +4,7 @@
  * The upstream container is a fixed-capacity slot array with a parallel array of
  * keys (`mItemIds`); a slot is live while its key bits are non-zero. Allocation
  * reuses freed slots through a free list and hands out a `(key << 16) | index`
- * handle that stays valid across deletions (see docs/research/03-save.md §6.6,
+ * handle that stays valid across deletions (see ../verification/research/03-save.md §6.6,
  * which fixes this exact Java mapping).
  *
  * Java has no placement new, so the value-initialisation of `DataArrayItem : T`

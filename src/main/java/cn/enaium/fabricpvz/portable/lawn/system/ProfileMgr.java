@@ -4,7 +4,7 @@
  *
  * The profile index backed by `userdata/users.dat` (version 14, gProfileVersion):
  *   u32 version; u16 profileCount; then per profile: string mName (u16 length + bytes),
- *   u32 mUseSeq, u32 mId                       (docs/research/03-save.md §5)
+ *   u32 mUseSeq, u32 mId                       (../verification/research/03-save.md §5)
  *
  * Upstream the profiles live in `std::map<std::string, PlayerInfo, Sexy::StringLessNoCase>`, i.e.
  * keyed by name with a case-insensitive, name-ordered comparison; a TreeMap with

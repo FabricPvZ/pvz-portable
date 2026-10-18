@@ -301,7 +301,7 @@ class CommonTest {
     }
 
     /**
-     * Defect A of docs/VERIFICATION.md §59: on Windows the framework's path helpers used to hand
+     * Defect A of ../verification/VERIFICATION.md §59: on Windows the framework's path helpers used to hand
      * back native separators ({@code data\BrianneTod32Outline}), while every consumer of those
      * strings — {@code ImageLib}'s {@code '_'} companion probe ({@code rfind('/')}), the pak member
      * table, {@code GetFileDir(..., withSlash)}'s appended {@code '/'} — only understands

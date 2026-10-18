@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
 
-/** Byte-level verification of the ported save-file primitives (docs/research/03-save.md §2). */
+/** Byte-level verification of the ported save-file primitives (../verification/research/03-save.md §2). */
 class DataSyncTest {
 
     private static final byte[] GOLDEN_BLOB = new byte[] {

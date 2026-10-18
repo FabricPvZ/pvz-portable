@@ -29,8 +29,9 @@ import cn.enaium.fabricpvz.portable.sexy.graphics.Image;
  * PropogateColorToAttachments/ShouldTriggerTimedEvent), :1308-1318 (PlayReanim), :1320-1489 (attacher tracks)
  * and :1491-1508 (FindSubReanim).
  *
- * <p>The animation player. <b>Drawing contract</b> (docs/API-CONTRACTS.md §2 and
- * docs/research/04-reanim-ui.md §1.3/§6.2): every blit goes through
+ * <p>The animation player. <b>Drawing contract</b>
+ * (../verification/research/02-graphics-audio.md §8 and
+ * ../verification/research/04-reanim-ui.md §1.3/§6.2): every blit goes through
  * {@code Graphics}/{@code Image} with an explicit colour, source rect and draw mode;
  * {@code cn.enaium.fabricpvz.portable.pvzp.PvzpCommon.pvzpBltMatrix} is the shared matrix blit.
  *
@@ -38,7 +39,7 @@ import cn.enaium.fabricpvz.portable.sexy.graphics.Image;
  * <ul>
  *   <li>The upstream software fast path in {@code ReanimBltMatrix} (Reanimator.cpp:612-644) is not
  *       ported: the Java renderer always takes the matrix path, as recommended by
- *       docs/research/04-reanim-ui.md §6.2.</li>
+ *       ../verification/research/04-reanim-ui.md §6.2.</li>
  *   <li>Atlas handles are real {@code Image} references looked up through
  *       {@link ReanimAtlas#getEncodedReanimAtlas(Image)} instead of upstream's fake small pointers,
  *       so the {@code (uintptr_t)image <= 1000} guards do not exist here.</li>
@@ -297,7 +298,7 @@ public class Reanimation {
      *
      * <p>PORT-NOTE: only the matrix path is kept; the upstream software fast path for
      * {@code !Is3DAccelerated() && REANIM_FAST_DRAW_IN_SW_MODE && no skew && positive scale && white}
-     * is an optimisation the Java/OpenGL port does not need (docs/research/04-reanim-ui.md §6.2), and
+     * is an optimisation the Java/OpenGL port does not need (../verification/research/04-reanim-ui.md §6.2), and
      * {@code PvzpBltMatrix} itself is shared with the rest of the port.
      */
     public void reanimBltMatrix(Graphics g, Image theImage, SexyMatrix3 theTransform, Rect theClipRect, Color theColor, int theDrawMode, Rect theSrcRect) {

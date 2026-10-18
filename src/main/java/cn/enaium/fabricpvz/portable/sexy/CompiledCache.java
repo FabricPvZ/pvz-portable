@@ -11,7 +11,7 @@ import java.util.zip.Inflater;
 
 /**
  * Ported from src/PvzpLib/Definition.cpp:534-569, 578-673, 1240-1276 (the {@code *.compiled}
- * definition cache) and docs/research/05-assets-resource-stack.md §3.6.
+ * definition cache) and ../verification/research/05-assets-resource-stack.md §3.6.
  *
  * <p>The game caches compiled definition payloads (particles/reanimations) next to the app-data
  * directory as {@code <xml>.compiled} files. The container is:

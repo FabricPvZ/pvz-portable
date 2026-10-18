@@ -1548,7 +1548,7 @@ public final class Common {
      * come from the {@code '/'}-authored resource manifests. Emitting native separators (the old
      * {@code Path.toString()}) therefore injected {@code '\'} into that {@code '/'}-speaking world on
      * Windows only, which broke e.g. the {@code data\BrianneTod32Outline} font image lookup (see
-     * docs/VERIFICATION.md §59).
+     * ../verification/VERIFICATION.md §59).
      *
      * <p>Converting unconditionally — instead of following {@code File.separatorChar} — keeps the
      * two directions of the bridge idempotent and makes path handling independent of the host OS: a

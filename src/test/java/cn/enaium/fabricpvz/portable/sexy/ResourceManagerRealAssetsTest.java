@@ -16,7 +16,7 @@ import cn.enaium.fabricpvz.portable.sexy.pak.PakInterface;
 /**
  * Assumption-gated integration test: parses the shipped {@code properties/resources.xml} out of the
  * local {@code main.pak} and checks the documented manifest counts and known id → pak member
- * resolution (docs/research/01-framework-core.md §4.5).
+ * resolution (../verification/research/01-framework-core.md §4.5).
  */
 class ResourceManagerRealAssetsTest {
 

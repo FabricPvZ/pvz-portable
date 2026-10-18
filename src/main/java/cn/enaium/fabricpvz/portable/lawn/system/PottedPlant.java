@@ -88,7 +88,7 @@ public class PottedPlant {
      * alignment padding dwords - and byte-swaps them on big-endian hosts ({@code PottedPlantToLE} on
      * write, {@code PottedPlantFromLE} after the read). Java has no raw struct, so the same 88 bytes
      * (0x58) are written/read field by field in little-endian order; the padding dwords are part of
-     * the `user{id}.dat` record (docs/research/03-save.md §4.2).
+     * the `user{id}.dat` record (../verification/research/03-save.md §4.2).
      */
     public void sync(DataSync theSync) {
         mSeedType = theSync.syncUInt32(mSeedType);
@@ -113,7 +113,7 @@ public class PottedPlant {
     /**
      * Ported from src/Lawn/System/SaveGame.cpp:606-624 ({@code SyncPottedPlantPortable}); field order
      * is upstream-exact (enum/int fields ride on the i32 codec, the timestamps on the i64 codec) and
-     * the two padding dwords are omitted, so this form is 80 bytes on the wire (docs/research/03-save.md
+     * the two padding dwords are omitted, so this form is 80 bytes on the wire (../verification/research/03-save.md
      * §4.2). Used by the `.v4` board format ({@code Coin.mPottedPlantSpec}, zen-garden grid items).
      */
     public void syncPortable(DataSync theSync) {

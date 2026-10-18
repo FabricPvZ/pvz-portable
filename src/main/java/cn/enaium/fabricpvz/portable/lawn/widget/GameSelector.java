@@ -525,7 +525,7 @@ public class GameSelector extends Widget implements ButtonListener {
      * <p>The menu keeps updating for a few frames after a level starts (it is still in the widget tree
      * during the level intro) while the level's start-up releases the effect-system reanimations, so its
      * handle can be stale. {@code reanimationGet} throws for a stale handle; skipping the animation is
-     * what the player sees anyway. Found by the real-click playthrough (docs/VERIFICATION.md §14).
+     * what the player sees anyway. Found by the real-click playthrough (../verification/VERIFICATION.md §14).
      */
     private Reanimation selectorReanim() {
         return mApp.reanimationTryToGet(mSelectorReanimID);

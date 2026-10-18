@@ -28,7 +28,7 @@ import cn.enaium.fabricpvz.portable.sexy.graphics.Graphics;
  *
  * <p>All public fields keep their upstream names (Challenge.h:64-87); every upstream enum-typed
  * field/parameter/return value is an {@code int} holding this port's enum-constant value
- * (API-CONTRACTS.md §6).
+ * (AGENTS.md §7, item 2).
  *
  * <p>The data tables are reproduced verbatim from the C++ source, with the upstream {@code line}
  * recorded per row so a future diff is mechanical:

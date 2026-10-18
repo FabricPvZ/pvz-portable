@@ -54,7 +54,7 @@ public class GridItem {
     public MotionTrailFrame[] mMotionTrailFrames = new MotionTrailFrame[NUM_MOTION_TRAIL_FRAMES];
     public int mMotionTrailCount;
 
-    /** Monotonic allocation id replacing C++ pointer comparison (see docs/research/03-board-core.md §7.3). */
+    /** Monotonic allocation id replacing C++ pointer comparison (see ../verification/research/03-board-core.md §7.3). */
     public long mAllocId = GameObject.nextAllocId();
 
     /** Ported from src/Lawn/GridItem.cpp:23-63 (GridItem::GridItem). */

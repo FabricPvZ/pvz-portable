@@ -30,7 +30,7 @@ import cn.enaium.fabricpvz.portable.sexy.sound.SoundManager;
  *       is logged and skipped: {@code LoadSound(id, name)} reports success and the slot keeps a
  *       {@code null} buffer, which is the same state the uninitialized-mixer case leaves behind. An
  *       asset that is not in the pak/files at all still returns {@code false}, so a resource the
- *       manifest names but nobody ships keeps failing the loading thread (docs/VERIFICATION.md §59).</li>
+ *       manifest names but nobody ships keeps failing the loading thread (../verification/VERIFICATION.md §59).</li>
  *   <li>{@code LoadSound(name)} reuses the id whose file name matches, otherwise it scans
  *       <em>from the top of the array down</em> ({@code for (i = MAX_SOURCE_SOUNDS-1; i >= 0; i--)})
  *       for a free slot; {@code GetFreeSoundId} scans <em>forward</em>.</li>
@@ -164,7 +164,7 @@ public final class OpenAlSoundManager implements SoundManager, AutoCloseable {
 
         // The asset is there, so a container this port cannot decode is skipped (with a log line)
         // instead of aborting the loading thread — same treatment music already gets
-        // (Music.loadSong logs "music failed to load" and carries on). See docs/VERIFICATION.md §59.
+        // (Music.loadSong logs "music failed to load" and carries on). See ../verification/VERIFICATION.md §59.
         mSourceSounds[(int) theSfxID] = decode(theFilename, candidates);
         return true;
     }

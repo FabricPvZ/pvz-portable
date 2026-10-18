@@ -12,7 +12,7 @@ package cn.enaium.fabricpvz.portable.sexy;
  * from the stream; when writing, it is the argument unchanged. Ported call sites read as
  * {@code theField = theSync.syncUInt32(theField);}.
  *
- * <p>Wire format (little-endian, §2 of docs/research/03-save.md):
+ * <p>Wire format (little-endian, §2 of ../verification/research/03-save.md):
  * <pre>
  *   uint8  1 byte
  *   bool   1 byte (the C++ bool representation)

@@ -567,7 +567,7 @@ public class LawnApp extends SexyApp {
         eraseFile(aFileName);
         // PORT-NOTE (deviation from LawnApp.cpp:350-352): upstream also erases the legacy
         // game<id>_<mode>.dat here. This port cannot decode the legacy raw-C++-memory-image format
-        // (SaveGame.LegacySaveFormatException; docs/VERIFICATION.md §7), so tryLoadGame always fails
+        // (SaveGame.LegacySaveFormatException; ../verification/VERIFICATION.md §7), so tryLoadGame always fails
         // for such a file and erasing it would destroy the user's only copy with nothing migrated.
         // The legacy file is therefore erased only after a *successful* migration inside tryLoadGame
         // (LawnApp.cpp:396-410), matching upstream's post-migration cleanup.
@@ -2364,7 +2364,7 @@ public class LawnApp extends SexyApp {
 
         boolean aUnlockedNewChallenge = updatePlayerProfileForFinishingLevel();
 
-        // Mod hook: level ended with a win (docs/research/03-board-core.md §7.4).
+        // Mod hook: level ended with a win (../verification/research/03-board-core.md §7.4).
         LawnHooksRegistry.dispatcher().onLevelEnd(mBoard, BoardResult.BOARDRESULT_WON);
 
         if (isAdventureMode()) {

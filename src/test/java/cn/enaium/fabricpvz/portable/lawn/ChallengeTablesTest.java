@@ -8,8 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 /**
- * Golden-table tests for the ported {@link Challenge} data (docs/research/03-levels.md §1.1-1.3,
- * docs/research/04-reanim-ui.md §3.1) and for the stage classification Board derives from the
+ * Golden-table tests for the ported {@link Challenge} data (../verification/research/03-levels.md §1.1-1.3,
+ * ../verification/research/04-reanim-ui.md §3.1) and for the stage classification Board derives from the
  * background (Board.cpp:8649-8662).
  *
  * <p>Every expected vector below is hard-coded from the cited documentation section, never recomputed
@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
  */
 class ChallengeTablesTest {
 
-    /** docs/research/03-levels.md §1.1 = Challenge.h:259-265 ({@code gZombieWaves}). */
+    /** ../verification/research/03-levels.md §1.1 = Challenge.h:259-265 ({@code gZombieWaves}). */
     private static final int[] GOLDEN_ZOMBIE_WAVES = {
             4, 6, 8, 10, 8, 10, 20, 10, 20, 20,
             10, 20, 10, 20, 10, 10, 20, 10, 20, 20,
@@ -26,7 +26,7 @@ class ChallengeTablesTest {
             10, 20, 20, 30, 20, 20, 30, 20, 30, 30,
     };
 
-    /** docs/research/04-reanim-ui.md §3.1: page totals of the 72 {@code gChallengeDefs} rows. */
+    /** ../verification/research/04-reanim-ui.md §3.1: page totals of the 72 {@code gChallengeDefs} rows. */
     private static final int GOLDEN_SURVIVAL_PAGE_COUNT = 11;
 
     private static final int GOLDEN_CHALLENGE_PAGE_COUNT = 20;
@@ -43,7 +43,7 @@ class ChallengeTablesTest {
         assertEquals(GameConstants.NUM_LEVELS, Challenge.gZombieWaves.length,
                 "one wave count per adventure level (Challenge.h:259)");
         assertArrayEquals(GOLDEN_ZOMBIE_WAVES, Challenge.gZombieWaves,
-                "gZombieWaves must equal docs/research/03-levels.md §1.1");
+                "gZombieWaves must equal ../verification/research/03-levels.md §1.1");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -52,7 +52,7 @@ class ChallengeTablesTest {
 
     @Test
     void zombieAllowedLevelsGoldenVectors() {
-        // docs/research/03-levels.md §1.3, per-entry availability vectors (5 rows of 10).
+        // ../verification/research/03-levels.md §1.3, per-entry availability vectors (5 rows of 10).
         assertAllowed(ZombieType.ZOMBIE_NORMAL, repeat(1));
         assertAllowed(ZombieType.ZOMBIE_FLAG, repeat(1));
         assertAllowed(ZombieType.ZOMBIE_TRAFFIC_CONE, new int[] {

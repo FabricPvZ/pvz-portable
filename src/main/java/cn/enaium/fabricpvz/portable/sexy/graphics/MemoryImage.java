@@ -33,7 +33,7 @@ import cn.enaium.fabricpvz.portable.sexy.SexyMatrix3;
  *   <li><b>Palettes</b> ({@code mColorTable}, {@code mColorIndices}, {@code mWantPal},
  *       {@code Palletize}, {@code Quantize8Bit} and the palettized branches of every blitter).
  *       They are a CPU-memory optimization for the software blitters; every image in this port is
- *       straight ARGB (see docs/research/02-graphics-audio.md §8.8.2, which lists exactly these as
+ *       straight ARGB (see ../verification/research/02-graphics-audio.md §8.8.2, which lists exactly these as
  *       droppable). {@code ImageLib} expands palettized PNG/GIF eagerly.
  *       {@code PrecacheAdditive}/{@code PrecacheAlpha}/{@code PrecacheNative}
  *       ({@code SexyAppBase.cpp:3994-4008}) had zero callers repo-wide and are not ported.</li>
@@ -50,7 +50,7 @@ import cn.enaium.fabricpvz.portable.sexy.SexyMatrix3;
  *
  * <p>PORT-NOTE: upstream implements {@code BltMatrix}/{@code BltTrianglesTex} through the
  * {@code SWTri} software triangle rasterizer (128 per-format entry points), which
- * docs/research/02-graphics-audio.md §8.8.2 lists as droppable (superseded by GPU triangles).
+ * ../verification/research/02-graphics-audio.md §8.8.2 lists as droppable (superseded by GPU triangles).
  * Since the SDL {@link RendererBackend} of this port has no triangle primitive, the software
  * fallback here is a self-contained barycentric textured-triangle rasterizer. It reproduces
  * upstream's fragment rules verbatim — the {@code 0x08} alpha cull, the {@code >>> 8} tint

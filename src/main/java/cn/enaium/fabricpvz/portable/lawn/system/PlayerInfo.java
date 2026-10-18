@@ -6,7 +6,7 @@
  * `SyncDetails` below; the three summary fields (mName/mUseSeq/mId) live in `users.dat` instead and
  * are serialized by `SyncSummary` (that is what ProfileMgr::SyncState writes per profile record).
  *
- * Byte layout: docs/research/03-save.md §4.3 (all integers little-endian; strings are a u16 byte
+ * Byte layout: ../verification/research/03-save.md §4.3 (all integers little-endian; strings are a u16 byte
  * length followed by the raw bytes). Achievements are stored as 20 x u16 (0/1); mShownAchievements
  * is NOT persisted and is rebuilt equal to mEarnedAchievements on load; the 20-byte mini-game flag
  * block after the Zombatar records is derived from mChallengeRecords[i + 0x0F] on write and
@@ -106,7 +106,7 @@ public class PlayerInfo {
     /**
      * Ported from src/Lawn/System/PlayerInfo.cpp:76-213.
      *
-     * <p>Stream order is exactly docs/research/03-save.md §4.3: version u32, mLevel, mCoins,
+     * <p>Stream order is exactly ../verification/research/03-save.md §4.3: version u32, mLevel, mCoins,
      * mFinishedAdventure, 100 challenge records, 80 purchases, 21 scalars, the live PottedPlant blobs,
      * 20 achievement u16s, the Zombatar block, 20 derived mini-game flag bytes and the
      * mZombatarCreatedBefore byte.

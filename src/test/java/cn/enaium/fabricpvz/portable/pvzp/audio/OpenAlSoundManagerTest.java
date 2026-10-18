@@ -265,7 +265,7 @@ class OpenAlSoundManagerTest {
 
             try (OpenAlSoundManager manager = new OpenAlSoundManager(pak, device)) {
                 // The asset exists but no decoder can read it: logged and skipped, the loading thread
-                // must not abort (docs/VERIFICATION.md §59).
+                // must not abort (../verification/VERIFICATION.md §59).
                 assertTrue(manager.loadSound(0, "weird"), "an undecodable asset is skipped, not fatal");
                 assertNull(manager.mSourceSounds[0]);
                 assertEquals(0, manager.getNumSounds());

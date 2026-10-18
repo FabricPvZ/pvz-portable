@@ -231,7 +231,7 @@ public class PvzpResourceManager extends ResourceManager {
         if (theImage == null) {
             // A null member must not match an entry whose image reference is empty: that is what wrote
             // the background image's name into every empty cached image slot of every reanimation
-            // definition, which then reloaded as the background picture (see docs/VERIFICATION.md §12).
+            // definition, which then reloaded as the background picture (see ../verification/VERIFICATION.md §12).
             return false;
         }
         for (Map.Entry<String, BaseRes> anItr : mImageMap.entrySet()) {

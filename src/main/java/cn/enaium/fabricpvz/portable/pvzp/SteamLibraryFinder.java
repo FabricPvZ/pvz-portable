@@ -52,7 +52,7 @@ public final class SteamLibraryFinder {
 
     /**
      * Ordered candidate Steam root directories for {@code os} ({@code System.getProperty("os.name")},
-     * docs/research/05-assets-resource-stack.md:793-795).
+     * ../verification/research/05-assets-resource-stack.md:793-795).
      *
      * <p>The match is case-insensitive because {@code os.name} is {@code "Mac OS X"}, not {@code "mac"}.
      */
@@ -83,7 +83,7 @@ public final class SteamLibraryFinder {
      * <p>PORT-NOTE: a Windows base ({@code C:\Program Files (x86)}) is a single path segment on a
      * Unix JVM, so {@link Path#resolve} would join it with {@code '/'} instead of {@code '\'}
      * (the documented {@code %ProgramFiles(x86)%\Steam} form,
-     * docs/research/05-assets-resource-stack.md:794). Join the separator by hand when the base is a
+     * ../verification/research/05-assets-resource-stack.md:794). Join the separator by hand when the base is a
      * Windows path.
      */
     private static void addIfPresent(List<Path> roots, String base, String child) {
@@ -149,7 +149,7 @@ public final class SteamLibraryFinder {
      * Handles both the legacy numeric-index format and the current {@code "path" "..."} format.
      *
      * <p>The value is the <b>second</b> quoted token on the line: {@code "path" <padding> "<abs
-     * path>"} (docs/research/05-assets-resource-stack.md:797). Reading the text between the two
+     * path>"} (../verification/research/05-assets-resource-stack.md:797). Reading the text between the two
      * quotes around the key instead yields the padding, not the path.
      */
     static List<Path> parseLibraryFolders(String vdfContent) {

@@ -37,7 +37,7 @@ import cn.enaium.fabricpvz.portable.sexy.parsers.XMLParser;
  * compiled definition cache the game writes next to the app data.
  *
  * <p><b>Compiled cache format</b> (Definition.cpp:534-558, 1240-1274 and the doc
- * docs/research/05-assets-resource-stack.md §3.6): little-endian throughout,
+ * ../verification/research/05-assets-resource-stack.md §3.6): little-endian throughout,
  * {@code CompressedDefinitionHeader{mCookie = 0xDEADFED4, mUncompressedSize}} followed by a zlib
  * ({@code compress()}-compatible) stream whose payload is
  * {@code uint32 defHash || raw struct image (mDefSize bytes) || pointer/string records}. The records
@@ -51,7 +51,7 @@ import cn.enaium.fabricpvz.portable.sexy.parsers.XMLParser;
  * <p><b>Java mapping.</b> Upstream addresses definition members with
  * {@code *(T*)((char*)theDefinition + aField->mFieldOffset)}; this port keeps {@code mFieldOffset} for
  * the flat struct image and the schema hash, and reads/writes the member through the public Java field
- * named by {@link DefField#mMemberName} (docs/API-CONTRACTS.md §6 keeps the upstream {@code m}
+ * named by {@link DefField#mMemberName} (AGENTS.md §7, item 2 keeps the upstream {@code m}
  * prefix). Raw pointers become arrays ({@link DefinitionArrayDef}, {@link FloatParameterTrack}), and
  * the resource manager/error box reach the app layer through
  * {@link DefinitionResourceResolver} (upstream used the {@code gSexyAppBase} global directly).
@@ -1043,7 +1043,7 @@ public final class Definition {
      * rejected and recompiled instead of being trusted.
      *
      * <p>Bumped to 2 after the cache writer stamped the background image's name into every empty image
-     * slot of every definition (docs/VERIFICATION.md §12): those files look structurally valid and kept
+     * slot of every definition (../verification/VERIFICATION.md §12): those files look structurally valid and kept
      * poisoning reanimations load after load, so the fix could not take effect until they expired.
      */
     public static final int CACHE_FORMAT_VERSION = 2;

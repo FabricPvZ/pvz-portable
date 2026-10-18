@@ -112,7 +112,7 @@ class WindowContentSmokeTest {
             // single-colour window means drawing never reached the window target.
             assertTrue(distinctColours(lastPixels) > 1,
                     "the window must show more than one colour after loading; a flat window means the "
-                            + "frame never reached the window target (see docs/VERIFICATION.md)");
+                            + "frame never reached the window target (see ../verification/VERIFICATION.md)");
         } finally {
             app.shutdown();
             LawnApp.gLawnApp = null;

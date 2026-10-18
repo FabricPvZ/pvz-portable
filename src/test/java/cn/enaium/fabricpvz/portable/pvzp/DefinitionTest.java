@@ -557,7 +557,7 @@ class DefinitionTest {
     /**
      * The cache format version seeds the walk: it is mixed into every schema hash so a cache written by
      * another build is rejected and recompiled (bumped to 2 after the cache writer stamped the background
-     * image's name into every empty image slot - docs/VERIFICATION.md §12).
+     * image's name into every empty image slot - ../verification/VERIFICATION.md §12).
      */
     private static int expectedHash(DefMap theDefMap) {
         return expectedHashDefMap(Definition.CACHE_FORMAT_VERSION, theDefMap, new ArrayList<>());

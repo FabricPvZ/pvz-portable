@@ -4,7 +4,7 @@
  *
  * The suburban almanac: an index page plus fixed 2D grids of the owned plants and of the
  * encountered zombies. There is no scrollbar; entry stat lines are built from the plant/zombie
- * definition tables plus the LawnStrings keys (docs/research/04-reanim-ui.md §2).
+ * definition tables plus the LawnStrings keys (../verification/research/04-reanim-ui.md §2).
  */
 package cn.enaium.fabricpvz.portable.lawn.widget;
 

@@ -55,7 +55,7 @@ class ScreenResourceLoadingTest {
      * {@code MemoryImage}, so its {@code getBits()} is its own buffer and the images the screen blits
      * into it are read through their CPU bits - no GPU read-back takes part, and in particular not
      * {@code GLImage.getBits()}'s texture read-back (the one that reads another target's pixels for a
-     * static texture; see {@code SdlRenderer#readTexturePixels} and docs/VERIFICATION.md §62.5
+     * static texture; see {@code SdlRenderer#readTexturePixels} and ../verification/VERIFICATION.md §62.5
      * deviation 3 / §64). A test whose only witness is that read-back would be checking the wrong
      * surface, which is why this one must not depend on it.
      */

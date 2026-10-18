@@ -68,7 +68,7 @@ public final class HeadlessTestApp {
         // app never sets one: without this it would be the process' working directory, i.e. the project,
         // where the dump tasks and the real-asset tests leave a cache64/ behind. A later asset-less test
         // then reads those caches and gets definitions its own resource layer cannot complete
-        // (docs/VERIFICATION.md §48.2). One temporary folder per process keeps every headless run
+        // (../verification/VERIFICATION.md §48.2). One temporary folder per process keeps every headless run
         // hermetic; tests that want their own folder still set one and restore this one.
         cn.enaium.fabricpvz.portable.sexy.Common.setAppDataFolder(headlessAppDataFolder());
 

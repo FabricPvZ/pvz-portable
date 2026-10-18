@@ -3,7 +3,7 @@
  *
  * The per-line port keeps upstream member/method names (camelCase methods, `m`-prefixed public
  * fields) and the upstream line ordering so it can be diffed against the C++ source. Tick units
- * are upstream ticks (1 tick = 10 ms, docs/research/03-plant.md §"Tick unit").
+ * are upstream ticks (1 tick = 10 ms, ../verification/research/03-plant.md §"Tick unit").
  */
 package cn.enaium.fabricpvz.portable.lawn;
 
@@ -46,7 +46,7 @@ public class Plant extends GameObject {
 
     /**
      * {@code cause} codes for {@link cn.enaium.fabricpvz.portable.lawn.hooks.LawnHooks#onPlantRemoved}
-     * (docs/research/03-board-core.md §7.4: "shovel/eaten/crater"). Upstream has no such enum;
+     * (../verification/research/03-board-core.md §7.4: "shovel/eaten/crater"). Upstream has no such enum;
      * this port defines the reason codes here because Plant.cpp is where the hook is fired.
      */
     public static final int PLANT_REMOVED_OTHER = 0;
@@ -4233,7 +4233,7 @@ public class Plant extends GameObject {
     /**
      * Java port addition: upstream has no single plant-damage entry point (Zombie::EatPlant and
      * Projectile write {@code mPlantHealth} directly). Funnelling those writes through here lets the
-     * PlantDamage hook rewrite the amount (docs/research/03-board-core.md §7.4).
+     * PlantDamage hook rewrite the amount (../verification/research/03-board-core.md §7.4).
      */
     public void takeDamage(int theDamage) {
         mPlantHealth -= LawnHooksRegistry.dispatcher().onPlantDamage(mBoard, this, theDamage);

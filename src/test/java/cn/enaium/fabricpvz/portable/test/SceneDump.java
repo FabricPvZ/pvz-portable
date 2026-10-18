@@ -236,7 +236,7 @@ public final class SceneDump {
      * {@link ChooserDumpApp} registers above the retail range. The preview is drawn from the game's
      * cached plant frame, and this is the scene that shows whether that frame has the plant's head:
      * before the fix the frame cache drew the separate {@code anim_head_idle} layer only for the game's
-     * own pea shooters, so a registered one was drawn headless here (docs/VERIFICATION.md §48).
+     * own pea shooters, so a registered one was drawn headless here (../verification/VERIFICATION.md §48).
      */
     private void cursorPreview() throws Exception {
         Plant.gPlantDefs[CHOOSER_SEED_TYPE] = new PlantDefinition(CHOOSER_SEED_TYPE, null,
@@ -269,7 +269,7 @@ public final class SceneDump {
      * The almanac's plant page with a seed type {@link ChooserDumpApp} registers above the retail range:
      * page 0 is the retail grid, the arrow next to the page buttons brings the page that holds the
      * registered plant on screen and selecting it shows its name and description from the mod
-     * (docs/VERIFICATION.md §47).
+     * (../verification/VERIFICATION.md §47).
      */
     private void almanac() throws Exception {
         Plant.gPlantDefs[CHOOSER_SEED_TYPE] = new PlantDefinition(CHOOSER_SEED_TYPE, null,

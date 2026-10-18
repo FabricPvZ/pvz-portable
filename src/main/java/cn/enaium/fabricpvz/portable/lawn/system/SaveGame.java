@@ -67,7 +67,7 @@ import cn.enaium.fabricpvz.portable.sexy.graphics.Image;
  * Ported from src/Lawn/System/SaveGame.cpp:49-2829 (the {@code .v4} mid-level board save).
  *
  * <p>This class owns the container format (header + CRC + chunk framing, {@code
- * docs/research/03-save.md} §6.1-§6.2) and the per-chunk portable sync functions that live in the
+ * ../verification/research/03-save.md} §6.1-§6.2) and the per-chunk portable sync functions that live in the
  * C++ {@code SaveGame.cpp} translation unit. Entity/board state is read through the public fields
  * of the ported classes; the per-object portable syncs are driven by a {@link DataSync} so the same
  * code reads and writes, exactly like the upstream {@code PortableSaveContext}
@@ -78,7 +78,7 @@ import cn.enaium.fabricpvz.portable.sexy.graphics.Image;
  * decodes the legacy dump ({@code SaveGame.cpp:2758-2789}), and {@code LawnApp::TryLoadGame}
  * re-saves a successfully loaded legacy file as {@code .v4} and erases the {@code .dat}
  * ({@code LawnApp.cpp:396-410}). That legacy container is <em>not</em> a field sequence: it is a raw
- * image of the running C++ process (docs/research/03-save.md §9: "This format embeds native struct
+ * image of the running C++ process (../verification/research/03-save.md §9: "This format embeds native struct
  * layout, padding, and {@code sizeof} and is <b>not portable</b>; do not reimplement it beyond a
  * best-effort migrator (or drop it - the port can reject legacy files)"), so it is by construction
  * not decodable into a Java object graph:
@@ -1841,7 +1841,7 @@ public final class SaveGame {
                 + "(LawnApp.cpp:396-410: LawnSaveGame(...), then EraseFile(*.dat)), then load the resulting "
                 + "'game<profile>_<mode>.v4' here - this port reads and writes only the PVZP_SAVE4 (.v4) "
                 + "container. The .dat is left on disk untouched: the new-game path does not erase a legacy "
-                + "save it could not decode (LawnApp.preNewGame PORT-NOTE, docs/VERIFICATION.md §7), so the "
+                + "save it could not decode (LawnApp.preNewGame PORT-NOTE, ../verification/VERIFICATION.md §7), so the "
                 + "file stays available for the migration above.";
     }
 

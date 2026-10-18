@@ -7,7 +7,7 @@ import cn.enaium.fabricpvz.portable.sexy.graphics.Graphics;
 
 /**
  * Extension hooks fired by the game at the sites documented in
- * {@code docs/research/03-board-core.md §7.4}.
+ * {@code ../verification/research/03-board-core.md §7.4}.
  *
  * <p>This is the game-side half of the modding API: {@code fabric-api} registers an
  * implementation that forwards every call to its Fabric-style {@code Event} objects, so mods see a

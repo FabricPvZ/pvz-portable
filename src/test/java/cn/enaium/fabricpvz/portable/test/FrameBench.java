@@ -45,7 +45,7 @@ public final class FrameBench {
         AtomicBoolean running = new AtomicBoolean(true);
 
         // Sampling only touches framework counters and the JVM's own MXBeans: never the renderer, which
-        // is not thread safe (see docs/VERIFICATION.md §10.1).
+        // is not thread safe (see ../verification/VERIFICATION.md §10.1).
         List<GarbageCollectorMXBean> collectors = ManagementFactory.getGarbageCollectorMXBeans();
         LawnApp appRef = app;
         Thread sampler = new Thread(() -> {

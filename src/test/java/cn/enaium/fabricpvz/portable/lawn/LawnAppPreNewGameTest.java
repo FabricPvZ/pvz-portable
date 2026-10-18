@@ -2,7 +2,7 @@
  * Tests for LawnApp.preNewGame (LawnApp.cpp:337-353).
  *
  * Port-specific guard: this port cannot decode the legacy raw-C++-memory-image save format
- * (SaveGame.LegacySaveFormatException; docs/VERIFICATION.md §7), so a legacy game<id>_<mode>.dat
+ * (SaveGame.LegacySaveFormatException; ../verification/VERIFICATION.md §7), so a legacy game<id>_<mode>.dat
  * that fails to load must NOT be erased by preNewGame - otherwise the user's only copy is destroyed
  * with nothing migrated. The legacy file is erased only after a successful migration inside
  * tryLoadGame (LawnApp.cpp:396-410).

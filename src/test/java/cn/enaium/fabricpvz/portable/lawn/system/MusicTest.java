@@ -18,7 +18,7 @@ import cn.enaium.fabricpvz.portable.sexy.sound.MusicInterface;
 
 /**
  * Exercises the ported {@link Music} behaviour against the spec in
- * docs/research/04-reanim-ui.md (section "Music + Foley runtime"): the {@code PlayMusic} MOD order
+ * ../verification/research/04-reanim-ui.md (section "Music + Foley runtime"): the {@code PlayMusic} MOD order
  * table, the {@code StartGameMusic} tune-selection tree, the fade-out curve and the burst/drums
  * state machine.
  *

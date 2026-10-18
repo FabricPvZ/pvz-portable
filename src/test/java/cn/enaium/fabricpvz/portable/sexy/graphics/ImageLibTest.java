@@ -229,7 +229,7 @@ class ImageLibTest {
     }
 
     /**
-     * Defect A of docs/VERIFICATION.md §59 — the exact shape of the Windows startup failure.
+     * Defect A of ../verification/VERIFICATION.md §59 — the exact shape of the Windows startup failure.
      *
      * <p>{@code data/BrianneTod32.txt} names its layer image {@code BrianneTod32Outline}, and
      * {@code FontData} resolves that against the descriptor's own directory through

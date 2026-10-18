@@ -63,7 +63,7 @@ import cn.enaium.fabricpvz.portable.sexy.Rect;
 
 /**
  * Container-level checks of the {@code .v4} mid-level save ({@link SaveGame}) against
- * docs/research/03-save.md §6.1-§6.2: header/CRC, chunk framing order, per-chunk version
+ * ../verification/research/03-save.md §6.1-§6.2: header/CRC, chunk framing order, per-chunk version
  * validation and legacy-format rejection.
  *
  * <p>Everything here works on fabricated in-memory byte arrays through {@link DataWriter}; no real
@@ -323,7 +323,7 @@ class SaveGameTest {
     }
 
     // ------------------------------------------------------------------------------------------
-    // Round trip of a running level (docs/research/03-save.md §6, §8, §10)
+    // Round trip of a running level (../verification/research/03-save.md §6, §8, §10)
     // ------------------------------------------------------------------------------------------
 
     /** The single live item of a one-entity array ({@link DataArray} iteration is live-slots-only). */
@@ -602,7 +602,7 @@ class SaveGameTest {
     /**
      * Writing the level that was just read back out must reproduce the file byte for byte, which is
      * only possible when every chunk reads and writes exactly the same fields in the same order
-     * (docs/research/03-save.md §6). This walks all 20 chunks of a populated level through
+     * (../verification/research/03-save.md §6). This walks all 20 chunks of a populated level through
      * read-then-write, so an asymmetric or missing field anywhere shows up here.
      */
     @Test

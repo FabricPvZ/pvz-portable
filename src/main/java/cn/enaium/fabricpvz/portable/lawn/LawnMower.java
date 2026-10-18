@@ -36,7 +36,7 @@ public class LawnMower {
     public int mMowerHeight;
     public int mLastPortalX;
 
-    /** Monotonic allocation id replacing C++ pointer comparison (see docs/research/03-board-core.md §7.3). */
+    /** Monotonic allocation id replacing C++ pointer comparison (see ../verification/research/03-board-core.md §7.3). */
     public long mAllocId = GameObject.nextAllocId();
 
     /** Ported from src/Lawn/LawnMower.cpp:30-85 (LawnMower::LawnMowerInitialize). */

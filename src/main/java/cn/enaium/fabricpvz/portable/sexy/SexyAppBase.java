@@ -42,7 +42,7 @@ import cn.enaium.fabricpvz.portable.sexy.sound.SoundManager;
  * clipboard, dialogs and the ~40 overridable hooks. Public fields and the virtual-method names keep
  * their upstream spelling (camelCased where upstream used PascalCase).
  *
- * <p>Constructor contract ({@code docs/research/01-framework-core.md} §8.2): the constructor only
+ * <p>Constructor contract ({@code ../verification/research/01-framework-core.md} §8.2): the constructor only
  * initialises fields and sub-objects. No window, no renderer/audio device, no filesystem access and
  * no thread is started here; all platform work happens in {@link #init()} / {@link #start()}.
  * {@link #current} (the {@code gSexyAppBase} equivalent) is assigned here, as upstream does, and is

@@ -8,7 +8,7 @@ package cn.enaium.fabricpvz.portable.lawn;
  *
  * <p>Upstream is a plain data holder: a zombie type plus a {@code NUM_LEVELS}-entry 0/1 availability
  * vector indexed by {@code level - 1}. Type and availability stay {@code int} (all upstream enums are
- * int-constant classes in this port, API-CONTRACTS.md §6) and the public fields keep their upstream
+ * int-constant classes in this port, AGENTS.md §7, item 2) and the public fields keep their upstream
  * names.
  */
 public class ZombieAllowedLevels {

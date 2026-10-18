@@ -64,7 +64,7 @@ public final class DefField {
 
     /**
      * Resolves the Java field backing this member. Public fields keep the upstream {@code m} prefix
-     * (docs/API-CONTRACTS.md §6), so plain reflection by name is enough.
+     * (AGENTS.md §7, item 2), so plain reflection by name is enough.
      */
     Field reflectedField(Object theDefinition) {
         Field aField = mReflectedField;

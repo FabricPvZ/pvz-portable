@@ -50,10 +50,10 @@ class ToolTipWidgetTest {
      * <p>The metrics come from the retail PopCap descriptors the manifest names — {@code <Font
      * id="PICO129" path="Pico129.txt"/>} and {@code <Font id="TINYBOLD" path="Pix118Bold.txt"/>}
      * (properties/resources.xml:39,51, under the {@code LoadingFonts} group's
-     * {@code <SetDefaults path="data" idprefix="FONT_"/>}; docs/research/02-graphics-audio.md
+     * {@code <SetDefaults path="data" idprefix="FONT_"/>}; ../verification/research/02-graphics-audio.md
      * §"Font resources"): each {@code data/&lt;name&gt;.txt} descriptor carries the per-character
      * source rects and {@code LayerSetPointSize} (Pico129: ascent 10, point size 9, \
-     * docs/research/02-graphics-audio.md:1502), and {@code ImageFont::CharWidthKern} sums
+     * ../verification/research/02-graphics-audio.md:1502), and {@code ImageFont::CharWidthKern} sums
      * {@code mWidth * mPointSize / layerPointSize} from those rects (ImageFont.cpp:1359-1409).
      *
      * <p>The boot is driven exactly like {@link GameBootSmokeTest} — {@code new LawnApp()},

@@ -26,6 +26,7 @@ import java.util.jar.JarOutputStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import cn.enaium.fabricpvz.provider.PvzGameProvider;
 import cn.enaium.fabricpvz.portable.lawn.HelmType;
 import cn.enaium.fabricpvz.portable.lawn.PlantSubClass;
 import cn.enaium.fabricpvz.portable.lawn.ReanimationType;
@@ -155,7 +156,11 @@ class FabricLoaderEndToEndTest {
         // 1) The loader itself: it resolved the game (built-in mod), the loader mod, the API modules
         // (mods on the class path) and the two mod jars from the mods directory.
         assertEquals("0.19.5", values.get("loaderVersion"), "the real Fabric Loader must be the one running");
-        assertEquals("1.1.0", values.get("gameVersion"), "the provider must report the game's version");
+        // Against the provider's own statement, not a literal: what this asserts is the wiring - the
+        // loader is handed the version the game provider publishes, and `checkGameVersion` is what
+        // keeps that constant equal to the version this build is packaged under.
+        assertEquals(PvzGameProvider.DEFAULT_GAME_VERSION, values.get("gameVersion"),
+            "the provider must report the game's version");
         assertEquals("client", values.get("environment"));
         assertTrue(Boolean.parseBoolean(values.get("development")), "the test runs the loader in development mode");
         assertNotNull(values.get("modsLoaded"), "the fixture must report the loaded mods");

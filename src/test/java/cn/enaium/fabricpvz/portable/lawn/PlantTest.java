@@ -4,7 +4,7 @@
  * The always-on group needs no game assets: it builds plants by hand and checks the data table,
  * the pure classification helpers and the geometry/render-order maths against values hand-derived
  * from src/Lawn/Plant.cpp. The behavioural group drives a real LawnApp/Board off the retail assets
- * (docs/research/03-plant.md) and is skipped when they are missing, so the suite stays green on
+ * (../verification/research/03-plant.md) and is skipped when they are missing, so the suite stays green on
  * machines without the game.
  */
 package cn.enaium.fabricpvz.portable.lawn;

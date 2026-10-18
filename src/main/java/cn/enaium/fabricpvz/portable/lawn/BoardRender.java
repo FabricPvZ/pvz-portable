@@ -5,7 +5,7 @@
  * delegate its public draw surface (see Board.h:260-470) to this class. Entity draw calls go
  * through the concrete peer types (Plant/Zombie/Coin/...); the render list is the flat
  * {@link RenderItem} array of Board.cpp:6074, sorted by (mZPos, mAllocId) as the port's replacement
- * for the upstream raw-pointer tie-break (Board.cpp:5926, docs/research/03-board-core.md §1.7).
+ * for the upstream raw-pointer tie-break (Board.cpp:5926, ../verification/research/03-board-core.md §1.7).
  *
  * Zen-garden branches now call the upstream {@link ZenGarden} APIs (plant overlays, the wheel-
  * barrow button and the zen tool buttons); every branch is implemented for real.

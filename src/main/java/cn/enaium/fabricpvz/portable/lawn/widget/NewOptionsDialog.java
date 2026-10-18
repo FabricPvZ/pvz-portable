@@ -9,7 +9,7 @@
  *    Dialogs.DIALOG_NEWOPTIONS.
  *  - The button ids 0..7 keep the upstream enum names.
  *  - Resize() adds the dialog origin (mX/mY) to the dialog-local literals of
- *    NewOptionsDialog.cpp:150-157 (docs/research/04-reanim-ui.md §13 deviation note 1: upstream
+ *    NewOptionsDialog.cpp:150-157 (../verification/research/04-reanim-ui.md §13 deviation note 1: upstream
  *    passes un-offset literals even though WidgetManager translates children by their own mX/mY).
  *  - GetPreferredHeight reproduces the upstream quirk of returning the menuback image *width*.
  */

@@ -7,9 +7,10 @@ provider, so the game is extended exactly like a Minecraft Fabric mod: `fabric.m
 `ModInitializer` entry points, a `mods/` directory, Sponge Mixin, and an event bus the game triggers at
 its own hook points.
 
-The version is **1.1.0**: the Gradle build, the jar, the Maven coordinate
-(`cn.enaium.fabricpvz:pvz-portable:1.1.0`) and the release archive
-(`pvz-portable-1.1.0.zip`) all carry it. It does **not** track the upstream C++ project's release tags.
+The version is **1.2.1**: the Gradle build, the jar, the Maven coordinate
+(`cn.enaium.fabricpvz:pvz-portable:1.2.1`) and the release archives
+(`pvz-portable-1.2.1-offline.zip`, the self-contained one, and `pvz-portable-1.2.1-online.zip`, the
+launcher-style one) all carry it. It does **not** track the upstream C++ project's release tags.
 
 The port has three layers, mirroring upstream: the engine (`sexy/`, the equivalent of
 SexyAppFramework), the game (`lawn/`, the equivalent of upstream's `src/Lawn/`) and the portable
@@ -65,18 +66,16 @@ from an explicit resource directory, name `syncDevResources` in the same invocat
 ### What the build needs from the other repositories
 
 This project is standalone: every sibling artifact it consumes comes from `mavenLocal()` as a Maven
-coordinate, never from a sibling checkout's build directory. The launcher is
-`cn.enaium.fabricpvz:fabric-provider` (a `runtimeOnly` dependency, which publishes the real Fabric
-Loader with Mixin, ASM and the logging stack); the mod API is an ordinary published coordinate too —
+coordinate, never from a sibling checkout's build directory. Its launcher (`lib/` of the distribution,
+the `runtimeOnly` dependencies of this build) is the real Fabric Loader with Mixin, ASM and the
+logging stack, plus the game provider, which is part of *this* project's own sources
+(`src/main/java/cn/enaium/fabricpvz/provider/`); the mod API is an ordinary published coordinate too —
 its five feature modules (`api-base`, `api-events`, `api-plant`, `api-resource`, `api-zombie`) are on
 the test *compile* class path only, and its aggregate jar (`fabric-api`) is what the loader end-to-end
 test finds in a real `mods/` directory (the version is `apiVersion` in `build.gradle.kts`, currently
 `1.2.0`). So, from a fresh clone with the siblings checked out side by side:
 
 ```bash
-# from the fabric-provider repository (publishes the launcher stack: Loader, Mixin, ASM, logging)
-./gradlew publishToMavenLocal
-
 # this project, without tests, to put its POM in mavenLocal (the API compiles against this game)
 ./gradlew publishToMavenLocal -x test
 
@@ -127,7 +126,7 @@ project directory therefore creates `userdata/` and `cache64/` next to the sourc
 ## The distribution (`distZip`)
 
 ```bash
-./gradlew distZip       # → build/distributions/pvz-portable-1.1.0.zip
+./gradlew distZip       # → build/distributions/pvz-portable-1.2.1-offline.zip
 ./gradlew installDist   # → build/install/pvz-portable/ (the same thing, expanded)
 ```
 
@@ -137,10 +136,10 @@ every platform**: it carries the LWJGL native libraries of Windows, Linux and ma
 the directory for the machine it runs on.
 
 ```
-pvz-portable-1.1.0/
+pvz-portable-1.2.1/
 ├── bin/pvz-portable            start script: Fabric Loader's launcher (KnotClient) — the same entry
 ├── bin/pvz-portable.bat        point `./gradlew run` uses; the .bat is the Windows counterpart
-└── lib/                        pvz-portable-1.1.0.jar and everything needed to start:
+└── lib/                        pvz-portable-1.2.1.jar and everything needed to start:
                                 the launcher stack (Fabric Loader, Mixin, ASM, the Log4j binding and
                                 log4j2.xml), slf4j-api, the LWJGL modules and all 36 natives jars
 ```
@@ -173,10 +172,10 @@ unpacked distribution that game directory is the unpacked root — the directory
 `lib/`, so **`mods/` sits next to `bin/`**:
 
 ```bash
-unzip -q build/distributions/pvz-portable-1.1.0.zip -d /tmp/pvz
-mkdir -p /tmp/pvz/pvz-portable-1.1.0/mods
-cp /path/to/fabric-api-1.2.0.jar /path/to/some-mod-1.0.0.jar /tmp/pvz/pvz-portable-1.1.0/mods/
-/tmp/pvz/pvz-portable-1.1.0/bin/pvz-portable     # start it from any working directory
+unzip -q build/distributions/pvz-portable-1.2.1.zip -d /tmp/pvz
+mkdir -p /tmp/pvz/pvz-portable-1.2.1/mods
+cp /path/to/fabric-api-1.2.0.jar /path/to/some-mod-1.0.0.jar /tmp/pvz/pvz-portable-1.2.1/mods/
+/tmp/pvz/pvz-portable-1.2.1/bin/pvz-portable     # start it from any working directory
 ```
 
 The start scripts set `-Dpvz.gameDir` to the unpacked root derived from the script's own location
@@ -186,7 +185,7 @@ the user's `JAVA_OPTS`/`PVZ_PORTABLE_OPTS`, and in the JVM a later `-D` of the s
 can relocate the game directory:
 
 ```bash
-PVZ_PORTABLE_OPTS="-Dpvz.gameDir=/some/other/game/dir" /tmp/pvz/pvz-portable-1.1.0/bin/pvz-portable
+PVZ_PORTABLE_OPTS="-Dpvz.gameDir=/some/other/game/dir" /tmp/pvz/pvz-portable-1.2.1/bin/pvz-portable
 ```
 
 The provider also accepts a `-gamedir <path>` game argument, but resolves `-Dpvz.gameDir` first, so in
@@ -197,8 +196,8 @@ macOS); add JVM options through `PVZ_PORTABLE_OPTS` or `JAVA_OPTS`.
 Assets are still yours to point at, either as a game argument or through the environment:
 
 ```bash
-/tmp/pvz/pvz-portable-1.1.0/bin/pvz-portable -resdir "/path/to/Plants vs. Zombies/Resources"
-PVZ_RES_DIR="/path/to/resources" /tmp/pvz/pvz-portable-1.1.0/bin/pvz-portable
+/tmp/pvz/pvz-portable-1.2.1/bin/pvz-portable -resdir "/path/to/Plants vs. Zombies/Resources"
+PVZ_RES_DIR="/path/to/resources" /tmp/pvz/pvz-portable-1.2.1/bin/pvz-portable
 ```
 
 The zip is also what **mod builds compile against**: a mod project's `pvz(...)` configuration names
@@ -211,7 +210,7 @@ link against — see the `loom` repository for the toolchain itself.
 The Steam installation is found by itself (`steamapps/libraryfolders.vdf` → every library folder), so
 the retail `Plants Vs Zombies` directory — including the Steam build's `.au` sounds — needs no wrapper
 directory and no converted assets. Verified on Windows 11 ARM64 with a Liberica JDK 25 and the real
-Steam assets (docs/VERIFICATION.md §59).
+Steam assets (../verification/VERIFICATION.md §59).
 
 **Rendering backend.** The SDL default renderer can take the JVM down inside `SDL_CreateRenderer`
 (`EXCEPTION_ACCESS_VIOLATION`) on some Windows setups — the launcher then has no `RENDERER:` line and
@@ -242,7 +241,7 @@ hidden by the skip.
 
 Verified on Fedora 44 Server (aarch64, OpenJDK 25) with Wayland and with X11: the window dump, both mod
 harnesses, a played level, the Steam asset discovery and the MO3 music all match the macOS numbers
-(docs/VERIFICATION.md §62).
+(../verification/VERIFICATION.md §62).
 
 **Display.** SDL3 needs a display server, and an SSH login has neither `DISPLAY` nor
 `WAYLAND_DISPLAY` set. Both routes work — Wayland through the session's runtime directory:
@@ -266,7 +265,7 @@ the window works normally, so the line is environment, not a defect.
 **Rendering backend.** The default (`opengl`) works even on a machine without a GPU — the VM runs it
 through Mesa's llvmpipe — and `-Dpvz.renderer=software` works as well. Both draw the same picture; the
 software backend used to lose a race with the window manager's first resize, which is fixed and
-explained in docs/VERIFICATION.md §62.
+explained in ../verification/VERIFICATION.md §62.
 
 **Native library directory.** The directory name is the one `OpenMptLibrary.nativePlatform()` produces:
 `linux-x64` and `linux-arm64`. The architecture is normalized, so `aarch64` maps to `arm64` — a
@@ -298,7 +297,7 @@ workflow, nothing that runs on a push — so a release is a deliberate, local ac
 ```bash
 # from the commit to release (on main), tagged with the version the build states: the tag names the
 # release and the asset is named after the same version
-VERSION="$(./gradlew -q printVersion)"                       # 1.1.0
+VERSION="$(./gradlew -q printVersion)"                       # 1.2.1
 git tag -a "$VERSION" -m "pvz-portable $VERSION" && git push origin "$VERSION"
 test "${VERSION#v}" = "$(git describe --tags --exact-match)" # tag == version, or stop here
 
@@ -413,7 +412,7 @@ mid-level save format (below).
 | Game: mid-level saves (`.v4`) | Done | 19 `SaveGameTest` tests: in-progress level round-trip, byte-identical rewrite after reading, CRC/version rejection |
 | Game: legacy `.dat` mid-level saves | N/A | Upstream README: `.dat` is "raw memory dumps … Do not share this file across platforms"; the port recognizes them by the upstream criterion and gives an actionable hint (open with the upstream version to auto-migrate to `.v4`) without faking a decoder |
 | Fabric Loader integration (game provider + API + a real `mods/` directory) | Done | `FabricLoaderEndToEndTest` launches Fabric Loader 0.19.5 in a second JVM with the API jar, the example mod and a fixture mod as the only three jars of a real `mods/` directory — the API is on the class path in neither mode the test runs — and verifies the resolved mod list (game, loader, the API's five modules nested in its aggregate jar, all three mod jars), a mod Mixin applied to game classes, the API's hook chain reaching a mod listener, the fixture's plant and zombie registrations on a real board, and the game booting Adventure level 1 to `SCENE_PLAYING` (300 ticks with the mod's board Mixin running) |
-| Distribution / release (the `application` plugin's zip) | Done | `./gradlew distZip` → `pvz-portable-1.1.0.zip` (`bin/` + `lib/` only, ~28 MB) with the 36 LWJGL natives jars, the bundled `lib/native/windows-{x64,arm64}/` libopenmpt (so Windows needs no installed library) and no `mods/` directory; verified outside the repository: unpacked in `/tmp`, `mods/` created next to `bin/`, mod jars copied in, `./bin/pvz-portable` started from an unrelated working directory → Fabric Loader resolves the mods and the game reaches `SCENE_PLAYING` |
+| Distribution / release (the `application` plugin's zip) | Done | `./gradlew distZip` → `pvz-portable-1.2.1-offline.zip` (`bin/` + `lib/` only, ~28 MB) and `./gradlew mcVersionZip` → `pvz-portable-1.2.1-online.zip` with the 36 LWJGL natives jars, the bundled `lib/native/windows-{x64,arm64}/` libopenmpt (so Windows needs no installed library) and no `mods/` directory; verified outside the repository: unpacked in `/tmp`, `mods/` created next to `bin/`, mod jars copied in, `./bin/pvz-portable` started from an unrelated working directory → Fabric Loader resolves the mods and the game reaches `SCENE_PLAYING` |
 
 ## Differences from upstream (deviation log)
 
@@ -428,7 +427,7 @@ mid-level save format (below).
 | Seed chooser | one grid of the retail seeds | **page 0 is that grid**; seed types the player has unlocked beyond the retail range (id ≥ `SeedType.NUM_SEEDS_IN_CHOOSER`, i.e. content a mod registered) get further pages, up to `SeedChooserScreen.CHOOSER_PAGE_SIZE` (48) per page in id order, with prev/next arrows beside "Let's Rock" | mod content needs somewhere to go in the chooser without disturbing the retail layout; with one page nothing beyond the grid is drawn or clickable, so the unmodded chooser is exactly upstream's |
 | Almanac | one fixed plant grid and one fixed zombie grid | **page 0 is each of those grids**; the plant page gets further pages for registered seed types the player has unlocked (id ≥ `SeedType.NUM_SEEDS_IN_CHOOSER`, `AlmanacDialog.ALMANAC_PLANT_PAGE_SIZE` = 48 per page in id order) and the zombie page gets them for defined zombie types above the retail range (id ≥ `ZombieType.NUM_ZOMBIE_TYPES`, 25 per page), with prev/next arrows and a `page/total` counter in the free stretch of the bottom button row | same rule as the chooser, and the game side stays neutral: names and descriptions go through the almanac's own `AlmanacDialog.getPlantDescriptionText` / `getZombieNameText` / `getZombieDescriptionText` seams, which `api-plant`/`api-zombie` inject for registered content; a single page draws no arrows and no counter, so the unmodded almanac is exactly upstream's |
 | Cached plant frame | `ReanimatorCache::MakeCachedPlantFrame` draws the separate `anim_head_idle` layer for a written-out list of seed types | the rule is read from the plant's reanimation (`anim_head_idle` exists ⇒ draw that layer), which is what the list stood for | the frame is what the cursor preview, the seed packet art and the almanac picture show, and the retail list left a plant registered with the same reanimation headless in all three; the retail set is unchanged (only the five pea shooters' reanimations carry that layer) |
-| Window and presentation | window created with `SDL_WINDOW_OPENGL \| SDL_WINDOW_RESIZABLE` (no high-DPI flag); every primitive is drawn straight into the window and scaled by SDL's logical presentation, and the window server stretches an 800x600 frame on a Retina display | the window requests `SDL_WINDOW_HIGH_PIXEL_DENSITY`; a frame is drawn 1:1 into an 800x600 offscreen **canvas** and the renderer composites that canvas into the drawable once per frame (upstream's `mScreenImage` architecture), filtering whole-number magnifications nearest and everything else linearly | the user asked for the SDL window's high-pixel mode; scaling every primitive distorts rotated/skewed quads and, at a fractional scale, copies some source pixels twice and others not at all (uneven text strokes) — see `docs/VERIFICATION.md` §52. A deliberate deviation from upstream, not a porting shortcut |
+| Window and presentation | window created with `SDL_WINDOW_OPENGL \| SDL_WINDOW_RESIZABLE` (no high-DPI flag); every primitive is drawn straight into the window and scaled by SDL's logical presentation, and the window server stretches an 800x600 frame on a Retina display | the window requests `SDL_WINDOW_HIGH_PIXEL_DENSITY`; a frame is drawn 1:1 into an 800x600 offscreen **canvas** and the renderer composites that canvas into the drawable once per frame (upstream's `mScreenImage` architecture), filtering whole-number magnifications nearest and everything else linearly | the user asked for the SDL window's high-pixel mode; scaling every primitive distorts rotated/skewed quads and, at a fractional scale, copies some source pixels twice and others not at all (uneven text strokes) — see `../verification/VERIFICATION.md` §52. A deliberate deviation from upstream, not a porting shortcut |
 
 ## Development tasks
 
@@ -511,7 +510,6 @@ part of its build:
 
 | Repository | What it is, and how this project relates to it |
 |---|---|
-| `fabric-provider` | the Fabric Loader game provider: finds the game (`GameProvider`), unlocks the class-loading path so Mixin can rewrite game classes, runs mod entry points, then calls the game's main class. It publishes the launch libraries — the real Fabric Loader, Mixin, ASM, and the SLF4J + Log4j stack — which is why this project depends on it as its single `runtimeOnly` launcher dependency and why `lib/` of the distribution is what it is |
 | `fabric-api` | the mod API: `api-base` (event bus + API entrypoints), `api-events` (lawn and lifecycle events), `api-plant` and `api-zombie` (content registration, plus the Mixins that dispatch a registered definition's behaviour into this game's methods), `api-resource` (a mod's own images: slots the game never draws, the game's own packet/cached-frame painters, per-track reanimation overrides, with its own entrypoint and Mixin). Its event types and Mixins are typed against this game's classes, and it is installed into `mods/` as the one aggregate mod jar `fabric-api` — never a class path dependency |
 | `loom` | the mod Gradle plugin `cn.enaium.fabricpvz.loom`, published on the Gradle Plugin Portal: one plugin line gives a mod the loader, Mixin, ASM, the API and **this game** as a distribution, plus a `runClient` task that boots the game through the real loader |
 | `pvz-example-mod` | reference mod: API events, mod hooks and a Mixin into the game. This project's loader end-to-end test loads its jar from `mavenLocal` |

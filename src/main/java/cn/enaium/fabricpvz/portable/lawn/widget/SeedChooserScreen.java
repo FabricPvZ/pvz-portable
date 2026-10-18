@@ -4,7 +4,7 @@
  *
  * Pre-level plant selection screen ("Choose your plants" / "Let's Rock"). Selection is
  * click-to-toggle (ClickedSeedInChooser / ClickedSeedInBank); there is no drag & drop — see
- * docs/research/04-reanim-ui.md §1 "IMPORTANT — divergences".
+ * ../verification/research/04-reanim-ui.md §1 "IMPORTANT — divergences".
  *
  * <p>PORT-NOTE: upstream draws one grid of seed packets, sized for the retail seed types, so a seed
  * type above them has no square to sit in. The port pages the grid instead: page 0 is the upstream

@@ -12,9 +12,9 @@ import java.io.IOException;
  * <p>Upstream relies on SDL_mixer-X codec registration plus an extension probe order
  * ({@code SDLSoundManager.cpp:246}: {@code .wav}, {@code .mp3}, {@code .ogg}, then the hand-written
  * {@code .au} reader). The retail GOTY assets only contain {@code .ogg} (169 files) and {@code .mo3}
- * (2 files) — see docs/research/02-graphics-audio.md §10.10.3 — while the Steam build ships two
+ * (2 files) — see ../verification/research/02-graphics-audio.md §10.10.3 — while the Steam build ships two
  * µ-law {@code .au} sounds ({@code sounds/diamond.au}, {@code sounds/tapglass.au}, see
- * docs/VERIFICATION.md §59), so this port sniffs the first bytes of the fetched asset and dispatches
+ * ../verification/VERIFICATION.md §59), so this port sniffs the first bytes of the fetched asset and dispatches
  * to the matching decoder instead of guessing from the name.
  */
 public enum AudioFormat {
@@ -31,7 +31,7 @@ public enum AudioFormat {
      * <p>Upstream's {@code SDLSoundManager::LoadAUSound} is the last resort of the extension probe
      * (SDLSoundManager.cpp:281-305), and the retail GOTY assets never reach it (169 {@code .ogg} +
      * 2 {@code .mo3}, no {@code .au}); the Steam assets do ({@code sounds/diamond.au},
-     * {@code sounds/tapglass.au} — see docs/VERIFICATION.md §59).
+     * {@code sounds/tapglass.au} — see ../verification/VERIFICATION.md §59).
      */
     AU,
 

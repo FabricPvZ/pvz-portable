@@ -23,7 +23,7 @@ import cn.enaium.fabricpvz.portable.sexy.graphics.Graphics;
  *
  * <p>{@link #mAllocId} and {@link #nextAllocId()} are a Java-only addition: upstream breaks
  * render-order ties with a raw pointer comparison (Board.cpp:5926-5931), which is not reproducible
- * in Java, so a monotonically increasing id (docs/API-CONTRACTS.md §6) is the deterministic
+ * in Java, so a monotonically increasing id (AGENTS.md §7, item 2) is the deterministic
  * substitute. Entities that do not derive from {@code GameObject} (LawnMower, GridItem) must take
  * their id from {@link #nextAllocId()} too.
  */
@@ -106,7 +106,7 @@ public class GameObject {
 
     /**
      * Ported from src/Lawn/System/SaveGame.cpp:535-543 (SyncGameObjectPortable) with the field
-     * order fixed by docs/research/03-entities.md §1 / docs/research/03-save.md §6.3:
+     * order fixed by ../verification/research/03-entities.md §1 / ../verification/research/03-save.md §6.3:
      * {@code mX(i32), mY(i32), mWidth(i32), mHeight(i32), mVisible(bool), mRow(i32),
      * mRenderOrder(i32)}.
      *

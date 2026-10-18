@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The one log configuration of the workspace.
+
+  Who writes into it: everything. Fabric Loader's own log
+  (net.fabricmc.loader.impl.util.log.Log) is pointed at the SLF4J facade of this stack by
+  PvzGameProvider the moment the loader constructs the game provider, which is the only moment early
+  enough to catch the loader's first line (the built-in handler buffers until then and this
+  configuration is the handler that receives that buffer). The Mixin subsystem goes through the same
+  `Log` (Knot's MixinServiceKnot logs through net.fabricmc.loader.impl.util.log, which is a `Log`
+  category), and every mod and the game itself log through the SLF4J API directly.
+
+  Where the file lives: it is a resource of cn.enaium.fabricpvz:fabric-provider, which publishes the
+  whole stack (the SLF4J API, its Log4j binding and the Log4j backend) as runtime dependencies, so
+  every launch path - `./gradlew run` in PvZ-Portable, a mod's `runClient`, the end-to-end forks and
+  an installed game - reads this exact configuration off its class path.
+
+  The format is the one Fabric Loom installs for mod development
+  (fabric-loom's `log4j2.fabric.xml`, `GenerateLog4jConfigTask`), so a log from this workspace reads
+  like a log from a Loom project:
+    `[time] [thread/LEVEL] (logger) message`
+  with the timestamp and the logger name as styles and the thread/level plus the message highlighted:
+  level colours are Loom's (FATAL/ERROR red, WARN yellow, INFO green, DEBUG green, TRACE blue) and
+  the message itself is only flagged red for FATAL/ERROR, normal otherwise - that is what makes a
+  wall of INFO lines readable.
+
+  Colour switch: `-Dfabric.log.disableAnsi=true` turns the ANSI styles off, the same property name
+  Loom uses. Unlike Loom (which defaults it to `true`, because Minecraft's console usually is a
+  plain pipe) this workspace defaults to `false`: the colours are kept when stdout is not a TTY, so
+  a Gradle run, a captured boot log or CI output keeps the highlighting.
+
+  The level: `-Dfabric.log.level=<trace|debug|info|warn|error>` (Fabric Loader's own switch, the same
+  one its built-in handler reads) sets the root level; without it the run is at INFO. Nothing is
+  written twice and no appender writes to a file, so a captured boot log is exactly what the console
+  showed.
+-->
+<Configuration status="warn">
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout disableAnsi="${sys:fabric.log.disableAnsi:-false}"
+                     pattern="%style{[%d{HH:mm:ss}]}{blue} %highlight{[%t/%level]}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=green, TRACE=blue} %style{(%logger{1})}{cyan} %highlight{%msg%n}{FATAL=red, ERROR=red, WARN=normal, INFO=normal, DEBUG=normal, TRACE=normal}"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="${sys:fabric.log.level:-info}">
+      <AppenderRef ref="Console"/>
+    </Root>
+  </Loggers>
+</Configuration>

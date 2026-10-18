@@ -2,7 +2,7 @@ package cn.enaium.fabricpvz.portable.sexy.hooks;
 
 /**
  * Application lifecycle hooks fired by the framework at the call points named in
- * docs/research/01-framework-core.md §2.1.
+ * ../verification/research/01-framework-core.md §2.1.
  *
  * <p>Gameplay hooks live in {@code cn.enaium.fabricpvz.portable.lawn.hooks.LawnHooks}; this one covers the
  * application/session boundary so the mod API can expose Fabric-style
